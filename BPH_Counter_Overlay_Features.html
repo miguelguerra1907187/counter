@@ -1,0 +1,974 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BPH Counter Overlay — Features & Scenarios</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:          #0D0E11;
+    --bg2:         #13151A;
+    --bg3:         #1A1D24;
+    --border:      #252830;
+    --border2:     #2E323D;
+    --text:        #E8EAF0;
+    --text2:       #9094A4;
+    --text3:       #5A5F72;
+    --green:       #1AE87A;
+    --green-dim:   #0F6E40;
+    --green-bg:    #071a10;
+    --yellow:      #FFD43B;
+    --yellow-dim:  #8A6D00;
+    --yellow-bg:   #1a1500;
+    --red:         #FF4D4D;
+    --red-dim:     #8A1F1F;
+    --red-bg:      #1a0808;
+    --purple:      #B09EFF;
+    --purple-dim:  #5E52B0;
+    --purple-bg:   #120f2a;
+    --gray:        #555A6B;
+    --gray-bg:     #13151a;
+    --mono:        'IBM Plex Mono', monospace;
+    --sans:        'IBM Plex Sans', sans-serif;
+    --radius:      10px;
+    --radius-lg:   16px;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.6;
+    padding: 0;
+    min-height: 100vh;
+  }
+
+  /* ── HEADER ── */
+  .header {
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    padding: 2.5rem 3rem 2rem;
+  }
+  .header-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 2rem;
+    flex-wrap: wrap;
+  }
+  .header-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text3);
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    padding: 5px 12px;
+    border-radius: 4px;
+    margin-bottom: 1rem;
+  }
+  .header-badge .dot { width: 6px; height: 6px; background: var(--green); border-radius: 50%; display: inline-block; }
+  h1 { font-size: 2rem; font-weight: 600; color: var(--text); line-height: 1.2; }
+  h1 span { color: var(--text2); font-weight: 300; }
+  .header-meta { margin-top: 0.75rem; color: var(--text2); font-size: 14px; }
+  .header-stats {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 1.5rem;
+  }
+  .hstat {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.75rem 1.25rem;
+    min-width: 140px;
+  }
+  .hstat-label { font-size: 11px; color: var(--text3); font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.08em; }
+  .hstat-val { font-size: 1.4rem; font-family: var(--mono); font-weight: 600; margin-top: 2px; }
+  .hstat-val.g { color: var(--green); }
+  .hstat-val.y { color: var(--yellow); }
+  .hstat-val.p { color: var(--purple); }
+
+  /* ── LAYOUT ── */
+  .main { max-width: 1100px; margin: 0 auto; padding: 2.5rem 2rem 4rem; }
+
+  /* ── SECTION HEADERS ── */
+  .section-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 3rem 0 1.25rem;
+  }
+  .section-num {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text3);
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 3px 9px;
+    letter-spacing: 0.05em;
+  }
+  .section-title {
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text2);
+  }
+
+  /* ── INFO BOX ── */
+  .info-box {
+    background: var(--bg2);
+    border: 1px solid var(--border2);
+    border-left: 3px solid var(--yellow);
+    border-radius: var(--radius);
+    padding: 1.1rem 1.5rem;
+    margin-bottom: 1.5rem;
+    font-size: 14px;
+    color: var(--text2);
+    line-height: 1.8;
+  }
+  .info-box strong { color: var(--text); font-weight: 500; }
+  .info-box .hl-g { color: var(--green); font-family: var(--mono); }
+  .info-box .hl-y { color: var(--yellow); font-family: var(--mono); }
+  .info-box .hl-p { color: var(--purple); font-family: var(--mono); }
+
+  /* ── CARDS GRID ── */
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+  .cards-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+  .cards-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; }
+
+  .card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 1.1rem 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .card.c-green  { border-left: 3px solid var(--green);  border-radius: 0 var(--radius-lg) var(--radius-lg) 0; }
+  .card.c-yellow { border-left: 3px solid var(--yellow); border-radius: 0 var(--radius-lg) var(--radius-lg) 0; }
+  .card.c-red    { border-left: 3px solid var(--red);    border-radius: 0 var(--radius-lg) var(--radius-lg) 0; }
+  .card.c-purple { border-left: 3px solid var(--purple); border-radius: 0 var(--radius-lg) var(--radius-lg) 0; }
+  .card.c-gray   { border-left: 3px solid var(--gray);   border-radius: 0 var(--radius-lg) var(--radius-lg) 0; }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 10px;
+    font-family: var(--mono);
+    font-weight: 600;
+    padding: 3px 9px;
+    border-radius: 4px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    width: fit-content;
+  }
+  .badge-green  { background: var(--green-bg);  color: var(--green);  border: 1px solid var(--green-dim);  }
+  .badge-yellow { background: var(--yellow-bg); color: var(--yellow); border: 1px solid var(--yellow-dim); }
+  .badge-red    { background: var(--red-bg);    color: var(--red);    border: 1px solid var(--red-dim);    }
+  .badge-purple { background: var(--purple-bg); color: var(--purple); border: 1px solid var(--purple-dim); }
+  .badge-gray   { background: var(--gray-bg);   color: var(--gray);   border: 1px solid #2e323d;           }
+
+  .card-title { font-size: 13px; font-weight: 600; color: var(--text); }
+  .card-desc  { font-size: 12px; color: var(--text2); line-height: 1.6; }
+
+  /* ── OVERLAY MOCK ── */
+  .overlay-wrap { margin-top: 6px; }
+  .overlay-label { font-size: 10px; color: var(--text3); font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; }
+  .overlay-mock {
+    display: inline-flex;
+    gap: 5px;
+    align-items: center;
+    font-family: var(--mono);
+    font-size: 16px;
+    font-weight: 600;
+    background: #000;
+    border: 1px solid #222;
+    padding: 4px 12px;
+    border-radius: 5px;
+  }
+  .sep { color: #333; }
+  .og { color: #1AE87A; }
+  .oy { color: #FFD43B; }
+  .or { color: #FF4D4D; }
+  .op { color: #B09EFF; }
+  .od { color: #444; }
+
+  /* ── REPORT MOCK ── */
+  .report-wrap {
+    background: #000;
+    border: 1px solid #222;
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin-top: 8px;
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.85;
+  }
+  .rw  { color: #fff; }
+  .rg  { color: #1AE87A; }
+  .ry  { color: #FFD43B; }
+  .rr  { color: #FF4D4D; }
+  .rp  { color: #B09EFF; }
+  .rd  { color: #444; }
+  .ro  { color: #ff8c00; }
+
+  /* ── BREAKDOWN TABLE ── */
+  .breakdown-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 1.25rem 1.5rem;
+  }
+  .bk-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    font-family: var(--mono);
+    margin-top: 0.75rem;
+  }
+  .bk-table th {
+    color: var(--text3);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-size: 10px;
+    padding: 0 8px 8px 0;
+    border-bottom: 1px solid var(--border);
+    text-align: left;
+  }
+  .bk-table td {
+    padding: 5px 8px 5px 0;
+    border-bottom: 1px solid var(--border);
+    color: var(--text2);
+    vertical-align: middle;
+  }
+  .bk-table tr:last-child td { border-bottom: none; }
+  .bk-table td:first-child { color: var(--text); font-weight: 500; }
+  .note-small {
+    font-size: 11px;
+    color: var(--text3);
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 7px 12px;
+    margin-top: 10px;
+    font-family: var(--mono);
+    line-height: 1.7;
+  }
+
+  /* ── KEYBOARD SHORTCUTS ── */
+  .shortcuts {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 0.5rem;
+  }
+  .shortcut {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.6rem 1rem;
+    flex: 1;
+    min-width: 180px;
+  }
+  .key {
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 600;
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    border-bottom: 2px solid var(--border2);
+    border-radius: 5px;
+    padding: 3px 8px;
+    color: var(--text);
+    white-space: nowrap;
+  }
+  .shortcut-desc { font-size: 12px; color: var(--text2); line-height: 1.4; }
+
+  /* ── DIVIDER ── */
+  .divider { border: none; border-top: 1px solid var(--border); margin: 2.5rem 0; }
+
+  /* ── FOOTER ── */
+  .footer {
+    background: var(--bg2);
+    border-top: 1px solid var(--border);
+    padding: 1.5rem 3rem;
+    font-size: 12px;
+    color: var(--text3);
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  /* ── COLOR LEGEND ── */
+  .legend {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-family: var(--mono);
+  }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+  /* ── HOW IT WORKS ── */
+  .how-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+  .how-step {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 1.1rem 1.25rem;
+    position: relative;
+  }
+  .step-num {
+    font-family: var(--mono);
+    font-size: 28px;
+    font-weight: 600;
+    color: var(--border2);
+    line-height: 1;
+    margin-bottom: 8px;
+  }
+  .step-title { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+  .step-desc  { font-size: 12px; color: var(--text2); line-height: 1.6; }
+
+  /* ── SCENARIO HIGHLIGHT ── */
+  .scenario-box {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+  }
+  .scenario-header {
+    padding: 0.75rem 1.25rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .scenario-body { padding: 1.25rem; }
+  .scenario-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  @media (max-width: 600px) { .scenario-row { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="header-top">
+    <div>
+      <div class="header-badge"><span class="dot"></span> Live overlay tool</div>
+      <h1>BPH Counter Overlay <span>— Features & Scenarios</span></h1>
+      <p class="header-meta">A real-time productivity tracker that runs invisibly in the background during your shift.</p>
+      <p class="header-meta" style="margin-top:6px; color:var(--text3); font-size:13px;">Prepared by <strong style="color:var(--text)">Miguel Alejandro Guerra Sifuentes</strong> &nbsp;·&nbsp; Biller &nbsp;·&nbsp; 2pm–11pm &nbsp;·&nbsp; Central Transport México</p>
+    </div>
+  </div>
+  <div class="header-stats">
+    <div class="hstat">
+      <div class="hstat-label">Shift hours</div>
+      <div class="hstat-val g">2pm – 11pm</div>
+    </div>
+    <div class="hstat">
+      <div class="hstat-label">Effective time</div>
+      <div class="hstat-val y">7.5 hrs</div>
+    </div>
+    <div class="hstat">
+      <div class="hstat-label">Hourly goal</div>
+      <div class="hstat-val g">32 bills/hr</div>
+    </div>
+    <div class="hstat">
+      <div class="hstat-label">Max theoretical</div>
+      <div class="hstat-val p">240–262 bills</div>
+    </div>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+
+  <!-- OVERLAY PREVIEW -->
+  <div style="margin-bottom: 2.5rem;">
+    <div class="section-head" style="margin-top:1rem">
+      <span class="section-num">Preview</span>
+      <span class="section-title">What you see on screen while working</span>
+    </div>
+    <div style="background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius-lg); padding:1.5rem 1.75rem;">
+      <p style="font-size:13px; color:var(--text2); margin-bottom:1.25rem; line-height:1.7;">
+        A small transparent box sits in the top-right corner of the screen at all times. It shows two numbers: the <strong style="color:var(--text)">current hour bill count</strong> and the <strong style="color:var(--text)">accumulated buffer</strong>. That is the entire overlay — nothing else, nothing blocking your work.
+      </p>
+      <div style="display:flex; align-items:flex-start; gap:2rem; flex-wrap:wrap;">
+
+        <!-- mock screen -->
+        <div style="flex:1; min-width:260px; background:#1a1a1a; border:1px solid #2a2a2a; border-radius:10px; padding:1rem; position:relative; min-height:160px;">
+          <div style="font-size:10px; color:#444; font-family:var(--mono); margin-bottom:8px; text-transform:uppercase; letter-spacing:0.08em;">Your screen</div>
+          <!-- simulated overlay in top-right -->
+          <div style="position:absolute; top:14px; right:14px; display:inline-flex; gap:5px; align-items:center; font-family:'IBM Plex Mono',monospace; font-size:18px; font-weight:700; background:#000; border:1px solid #222; padding:5px 13px; border-radius:5px; opacity:0.92;">
+            <span style="color:#1AE87A;">34</span><span style="color:#333;">|</span><span style="color:#1AE87A;">+6</span>
+          </div>
+          <div style="position:absolute; bottom:18px; left:50%; transform:translateX(-50%); font-size:11px; color:#333; font-family:var(--mono); white-space:nowrap;">↑ overlay floats here, always on top</div>
+        </div>
+
+        <!-- states column -->
+        <div style="flex:1; min-width:220px; display:flex; flex-direction:column; gap:10px;">
+          <div style="font-size:11px; color:var(--text3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:2px;">All possible states</div>
+
+          <div style="display:flex; align-items:center; gap:12px;">
+            <div style="display:inline-flex; gap:4px; align-items:center; font-family:'IBM Plex Mono',monospace; font-size:15px; font-weight:700; background:#000; border:1px solid #222; padding:3px 10px; border-radius:4px;">
+              <span style="color:#FF4D4D;">8</span><span style="color:#333;">|</span><span style="color:#FF4D4D;">-3</span>
+            </div>
+            <span style="font-size:12px; color:var(--text2);">Red — below 50% of goal</span>
+          </div>
+
+          <div style="display:flex; align-items:center; gap:12px;">
+            <div style="display:inline-flex; gap:4px; align-items:center; font-family:'IBM Plex Mono',monospace; font-size:15px; font-weight:700; background:#000; border:1px solid #222; padding:3px 10px; border-radius:4px;">
+              <span style="color:#FFD43B;">20</span><span style="color:#333;">|</span><span style="color:#FF4D4D;">-5</span>
+            </div>
+            <span style="font-size:12px; color:var(--text2);">Yellow — on the way, not there yet</span>
+          </div>
+
+          <div style="display:flex; align-items:center; gap:12px;">
+            <div style="display:inline-flex; gap:4px; align-items:center; font-family:'IBM Plex Mono',monospace; font-size:15px; font-weight:700; background:#000; border:1px solid #222; padding:3px 10px; border-radius:4px;">
+              <span style="color:#1AE87A;">34</span><span style="color:#333;">|</span><span style="color:#1AE87A;">+6</span>
+            </div>
+            <span style="font-size:12px; color:var(--text2);">Green — goal met</span>
+          </div>
+
+          <div style="display:flex; align-items:center; gap:12px;">
+            <div style="display:inline-flex; gap:4px; align-items:center; font-family:'IBM Plex Mono',monospace; font-size:15px; font-weight:700; background:#000; border:1px solid #222; padding:3px 10px; border-radius:4px;">
+              <span style="color:#B09EFF;">37</span><span style="color:#333;">|</span><span style="color:#B09EFF;">+11</span>
+            </div>
+            <span style="font-size:12px; color:var(--text2);">Purple — exceptional (≥35)</span>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- WHAT IT IS -->
+  <div class="section-head">
+    <span class="section-num">Overview</span>
+    <span class="section-title">What is this tool?</span>
+  </div>
+  <div class="how-grid">
+    <div class="how-step">
+      <div class="step-num">01</div>
+      <div class="step-title">Runs in the background</div>
+      <div class="step-desc">A small transparent overlay sits in the top-right corner of the screen. It never blocks work and requires no window switching.</div>
+    </div>
+    <div class="how-step">
+      <div class="step-num">02</div>
+      <div class="step-title">Counts bills in real time</div>
+      <div class="step-desc">Every time a bill is processed, the employee presses <strong style="color:var(--text)">Alt + S</strong>. The counter goes up instantly on screen.</div>
+    </div>
+    <div class="how-step">
+      <div class="step-num">03</div>
+      <div class="step-title">Tracks against hourly goal</div>
+      <div class="step-desc">Each hour has a target. The color of the overlay tells the employee at a glance whether they are on track or falling behind.</div>
+    </div>
+    <div class="how-step">
+      <div class="step-num">04</div>
+      <div class="step-title">Generates a shift report</div>
+      <div class="step-desc">At the end of the shift, pressing <strong style="color:var(--text)">F11</strong> shows a complete summary: average rate, total bills, buffer, best hour, and breakdown.</div>
+    </div>
+    <div class="how-step">
+      <div class="step-num">05</div>
+      <div class="step-title">Remembers your progress</div>
+      <div class="step-desc">If the app is closed and reopened during the same day, all counts and the accumulated buffer are fully restored.</div>
+    </div>
+    <div class="how-step">
+      <div class="step-num">06</div>
+      <div class="step-title">Handles shift exceptions</div>
+      <div class="step-desc">Break hours (4pm, 6pm) have a reduced goal of 24. The 7pm lunch hour is completely excluded — it neither adds nor removes from the score.</div>
+    </div>
+  </div>
+
+  <!-- SHIFT STRUCTURE -->
+  <div class="section-head">
+    <span class="section-num">Shift time</span>
+    <span class="section-title">How the 9-hour shift is counted</span>
+  </div>
+  <div class="info-box">
+    <strong>Total calendar time: 9 hours</strong> (2pm to 11pm)<br>
+    <strong>Effective productive time: <span class="hl-y">7.5 hours</span></strong> — the two break hours (4pm and 6pm) each contribute only 45 active minutes instead of 60, removing 2 × 15 = 30 minutes from the total.<br>
+    The 7pm lunch hour contributes <strong>0 minutes</strong> — anything done there is not counted.<br><br>
+    <span class="hl-g">Theoretical max at 32/hr → 7.5 × 32 = 240 bills</span> &nbsp;|&nbsp;
+    <span class="hl-p">At 35/hr → 7.5 × 35 = 262 bills</span>
+  </div>
+
+  <!-- SECTION 1: OVERLAY COLORS -->
+  <div class="section-head">
+    <span class="section-num">Section 1</span>
+    <span class="section-title">The overlay — what the colors mean</span>
+  </div>
+
+  <div class="info-box" style="border-left-color: var(--text3); margin-bottom: 1rem;">
+    The overlay shows two numbers separated by a bar: <strong>current hour count</strong> and <strong>accumulated buffer</strong>. Both change color based on performance.
+  </div>
+
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:var(--red)"></div> Red — below 50% of goal</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--yellow)"></div> Yellow — 50–99% of goal</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--green)"></div> Green — goal met (≥100%)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--purple)"></div> Purple — exceptional (≥35 bills)</div>
+  </div>
+
+  <div class="cards">
+    <div class="card c-red">
+      <div class="badge badge-red">● Red &lt;50%</div>
+      <div class="card-title">Below half the goal</div>
+      <div class="card-desc">2:10 pm — 8 out of 32 bills (25%). Buffer unchanged. Needs to pick up the pace significantly.</div>
+      <div class="overlay-wrap">
+        <div class="overlay-label">Overlay display</div>
+        <div class="overlay-mock"><span class="or">8</span><span class="sep">|</span><span class="or">+0</span></div>
+      </div>
+    </div>
+    <div class="card c-yellow">
+      <div class="badge badge-yellow">◑ Yellow 50–99%</div>
+      <div class="card-title">On the way but not there yet</div>
+      <div class="card-desc">2:40 pm — 20 out of 32 bills (62.5%). Buffer from previous hours: -5. Still needs to push to close the gap.</div>
+      <div class="overlay-wrap">
+        <div class="overlay-label">Overlay display</div>
+        <div class="overlay-mock"><span class="oy">20</span><span class="sep">|</span><span class="or">-5</span></div>
+      </div>
+    </div>
+    <div class="card c-green">
+      <div class="badge badge-green">✓ Green ≥100%</div>
+      <div class="card-title">Goal met</div>
+      <div class="card-desc">2:55 pm — 34 out of 32 bills. Hour closed with +2 to the buffer. A solid hour.</div>
+      <div class="overlay-wrap">
+        <div class="overlay-label">Overlay display</div>
+        <div class="overlay-mock"><span class="og">34</span><span class="sep">|</span><span class="og">+2</span></div>
+      </div>
+    </div>
+    <div class="card c-purple">
+      <div class="badge badge-purple">★ Purple ≥35</div>
+      <div class="card-title">Exceptional hour</div>
+      <div class="card-desc">2:58 pm — 37 bills. Passed the 35-bill threshold. Buffer receives a +5 bonus on top of the regular count.</div>
+      <div class="overlay-wrap">
+        <div class="overlay-label">Overlay display</div>
+        <div class="overlay-mock"><span class="op">37</span><span class="sep">|</span><span class="op">+5</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECTION 2: BREAK HOURS -->
+  <div class="section-head">
+    <span class="section-num">Section 2</span>
+    <span class="section-title">Break hours (4pm and 6pm) — 45 active minutes, goal is 24</span>
+  </div>
+  <div class="info-box" style="border-left-color: var(--yellow);">
+    These two hours have a <strong>reduced goal of 24 bills</strong> instead of 32, reflecting the shorter 45-minute working window. The purple threshold is also reduced to <strong>28 bills</strong>. The 15 remaining minutes are not counted in any calculation.
+  </div>
+  <div class="cards-3">
+    <div class="card c-green">
+      <div class="badge badge-green">✓ Break OK</div>
+      <div class="card-title">Break goal met</div>
+      <div class="card-desc">4pm break — 26 bills in 45 min. Goal of 24 exceeded. +2 added to buffer. Good performance under reduced time.</div>
+      <div class="overlay-wrap">
+        <div class="overlay-label">Overlay display</div>
+        <div class="overlay-mock"><span class="og">26</span><span class="sep">|</span><span class="og">+2</span></div>
+      </div>
+    </div>
+    <div class="card c-red">
+      <div class="badge badge-red">✗ Break low</div>
+      <div class="card-title">Below break goal</div>
+      <div class="card-desc">6pm break — 18 bills. 6 short of the 24 goal. -6 subtracted from buffer. Even breaks count against the total.</div>
+      <div class="overlay-wrap">
+        <div class="overlay-label">Overlay display</div>
+        <div class="overlay-mock"><span class="or">18</span><span class="sep">|</span><span class="or">-6</span></div>
+      </div>
+    </div>
+    <div class="card c-purple">
+      <div class="badge badge-purple">★ Purple break ≥28</div>
+      <div class="card-title">Exceptional break</div>
+      <div class="card-desc">6pm break — 30 bills in 45 min. Passed the 28-bill threshold. +6 to buffer. Outstanding productivity in limited time.</div>
+      <div class="overlay-wrap">
+        <div class="overlay-label">Overlay display</div>
+        <div class="overlay-mock"><span class="op">30</span><span class="sep">|</span><span class="op">+6</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECTION 3: LUNCH -->
+  <div class="section-head">
+    <span class="section-num">Section 3</span>
+    <span class="section-title">Lunch hour (7pm) — completely neutral</span>
+  </div>
+  <div class="info-box" style="border-left-color: var(--gray);">
+    Whatever happens at 7pm <strong>does not affect the buffer or the average</strong>. It is treated as 0 active minutes. The tool records any count shown but excludes it entirely from all final calculations.
+  </div>
+  <div class="cards-3">
+    <div class="card c-gray">
+      <div class="badge badge-gray">— Lunch</div>
+      <div class="card-title">Zero impact on score</div>
+      <div class="card-desc">7pm — any bills counted here are ignored. The buffer shown is whatever it was going into this hour. It remains exactly the same when the 8pm hour begins.</div>
+      <div class="overlay-wrap">
+        <div class="overlay-label">Overlay display — buffer stays frozen</div>
+        <div class="overlay-mock"><span class="oy">15</span><span class="sep">|</span><span class="og">+8</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECTION 4: BUFFER -->
+  <div class="section-head">
+    <span class="section-num">Section 4</span>
+    <span class="section-title">Accumulated buffer — the running score for the day</span>
+  </div>
+  <div class="info-box" style="border-left-color: var(--purple);">
+    The <strong>buffer</strong> is the running total of how many bills you are ahead of or behind the cumulative goal across all productive hours. It is updated automatically at the end of every hour. A <strong>positive buffer</strong> means you have done more than required; a <strong>negative buffer</strong> means you have a deficit to recover.
+  </div>
+  <div class="cards">
+    <div class="card c-purple">
+      <div class="badge badge-purple">★ Excellent ≥+16</div>
+      <div class="card-title">Multiple exceptional hours</div>
+      <div class="card-desc">7.5 productive hours, average ~36/hr. Several purple hours boost the buffer significantly. End-of-shift buffer: +19.</div>
+      <div class="overlay-mock" style="margin-top:6px"><span class="op">38</span><span class="sep">|</span><span class="op">+19</span></div>
+    </div>
+    <div class="card c-green">
+      <div class="badge badge-green">✓ Good +8 to +15</div>
+      <div class="card-title">Consistent day, no peaks</div>
+      <div class="card-desc">Average ~33.5/hr. Steady performance across all hours. End-of-shift buffer: +11.</div>
+      <div class="overlay-mock" style="margin-top:6px"><span class="og">33</span><span class="sep">|</span><span class="og">+11</span></div>
+    </div>
+    <div class="card c-yellow">
+      <div class="badge badge-yellow">◑ Slight +1 to +7</div>
+      <div class="card-title">A few slow hours</div>
+      <div class="card-desc">Average ~32.7/hr. Just above the goal overall, but some hours dragged. End-of-shift buffer: +5.</div>
+      <div class="overlay-mock" style="margin-top:6px"><span class="og">32</span><span class="sep">|</span><span class="oy">+5</span></div>
+    </div>
+    <div class="card c-red">
+      <div class="badge badge-red">✗ Negative</div>
+      <div class="card-title">Deficit accumulated</div>
+      <div class="card-desc">Several red hours. Average ~29/hr. Multiple hours below goal. End-of-shift buffer: -11.</div>
+      <div class="overlay-mock" style="margin-top:6px"><span class="oy">28</span><span class="sep">|</span><span class="or">-11</span></div>
+    </div>
+  </div>
+
+  <!-- SECTION 5: REPORTS -->
+  <div class="section-head">
+    <span class="section-num">Section 5</span>
+    <span class="section-title">End-of-shift report (F11) — all possible scenarios</span>
+  </div>
+  <div class="info-box" style="border-left-color: var(--purple);">
+    Pressing <strong>F11</strong> at any point in the shift generates the report. It automatically detects what fraction of the current hour is complete, applies the appropriate time weight, and calculates the final average and buffer. The report then closes the overlay.
+  </div>
+
+  <div class="cards-2" style="margin-bottom:12px">
+    <!-- SCENARIO A -->
+    <div class="card c-green">
+      <div class="badge badge-green">✓ Scenario A — Full shift, on track</div>
+      <div class="card-title">F11 pressed at 10:57 pm — 7.5 hrs complete, goal met</div>
+      <div class="card-desc">251 bills across 450 active minutes = 33.47/hr. Buffer: 251 − (7.5 × 32) = +11.</div>
+      <div class="report-wrap">
+        <span class="rw">BPH STATS</span><br>
+        <span class="rd">───────────────</span><br>
+        <span class="rg">[OK] ON TRACK</span><br>
+        <span class="rg">AVG: 33.47/hr</span><br>
+        <span class="rw">TOTAL: 251 bills</span><br>
+        <span class="rw">TIME: 7.5hr</span><br>
+        <span class="rd">────────────────────</span><br>
+        <span class="rg">[+] BUFFER: +11</span><br>
+        <span class="rd">────────────────────</span><br>
+        <span class="rp">BEST: 8pm → 42 bills</span><br>
+        <span class="ry">CONSISTENCY: 79%</span><br>
+        <span class="rd">────────────────────</span><br>
+        <span class="rw">BREAKDOWN</span><br>
+        <span class="ry">&nbsp;&nbsp;35, 28, 26, 30, 42, 34, 30, 26</span>
+      </div>
+    </div>
+    <!-- SCENARIO B -->
+    <div class="card c-red">
+      <div class="badge badge-red">✗ Scenario B — Full shift, below goal</div>
+      <div class="card-title">F11 pressed at 10:58 pm — 7.5 hrs complete, below goal</div>
+      <div class="card-desc">218 bills across 450 active minutes = 29.07/hr. Buffer: 218 − 240 = -22.</div>
+      <div class="report-wrap">
+        <span class="rw">BPH STATS</span><br>
+        <span class="rd">───────────────</span><br>
+        <span class="rr">[!!] BELOW GOAL</span><br>
+        <span class="rr">AVG: 29.07/hr</span><br>
+        <span class="rw">TOTAL: 218 bills</span><br>
+        <span class="rw">TIME: 7.5hr</span><br>
+        <span class="rd">────────────────────</span><br>
+        <span class="rr">[-] MISSING: 22</span><br>
+        <span class="rd">────────────────────</span><br>
+        <span class="rp">BEST: 8pm → 38 bills</span><br>
+        <span class="ry">CONSISTENCY: 76%</span><br>
+        <span class="rd">────────────────────</span><br>
+        <span class="rw">BREAKDOWN</span><br>
+        <span class="ry">&nbsp;&nbsp;22, 25, 20, 28, 38, 30, 27, 28</span>
+      </div>
+    </div>
+  </div>
+  <div class="cards-2">
+    <!-- SCENARIO C -->
+    <div class="card c-yellow">
+      <div class="badge badge-yellow">⚠ Scenario C — Half-hour penalty</div>
+      <div class="card-title">F11 pressed at 8:30 pm — 5 active hrs + half-hour penalty</div>
+      <div class="card-desc">The half-hour is penalized: the 16 bills made during that period are stripped out entirely — not counted in the total, not shown in the breakdown. Only the 5 full hours count. MISSING = 154 − (5 × 32) = 6. The penalty line is informational only.</div>
+      <div class="report-wrap">
+        <span class="rw">BPH STATS</span><br>
+        <span class="rd">───────────────</span><br>
+        <span class="rr">[!!] BELOW GOAL</span><br>
+        <span class="rr">AVG: 30.80/hr</span><br>
+        <span class="rw">TOTAL: 154 bills</span><br>
+        <span class="rw">TIME: 5hr</span><br>
+        <span class="rd">────────────────────</span><br>
+        <span class="rr">[-] MISSING: 6</span><br>
+        <span class="ro">[!] PENALTY: -16 (Half hour extra)</span><br>
+        <span class="rd">────────────────────</span><br>
+        <span class="rp">BEST: 2pm → 35 bills</span><br>
+        <span class="rd">────────────────────</span><br>
+        <span class="rw">BREAKDOWN</span><br>
+        <span class="ry">&nbsp;&nbsp;35, 28, 26, 30, 35</span>
+      </div>
+    </div>
+    <!-- SCENARIO D -->
+    <div class="card c-purple">
+      <div class="badge badge-purple">★ Scenario D — Purple shift</div>
+      <div class="card-title">F11 pressed at 10:57 pm — exceptional across the board</div>
+      <div class="card-desc">Multiple hours above 35 bills. Full shift of 7.5 hrs. Buffer of +19 reflects consistent high performance.</div>
+      <div class="report-wrap">
+        <span class="rw">BPH STATS</span><br>
+        <span class="rd">───────────────</span><br>
+        <span class="rp">[★] OUTSTANDING</span><br>
+        <span class="rp">AVG: 36.13/hr</span><br>
+        <span class="rw">TOTAL: 271 bills</span><br>
+        <span class="rw">TIME: 7.5hr</span><br>
+        <span class="rd">────────────────────</span><br>
+        <span class="rp">[+] BUFFER: +31</span><br>
+        <span class="rd">────────────────────</span><br>
+        <span class="rp">BEST: 9pm → 44 bills</span><br>
+        <span class="ry">CONSISTENCY: 96%</span><br>
+        <span class="rd">────────────────────</span><br>
+        <span class="rw">BREAKDOWN</span><br>
+        <span class="rp">&nbsp;&nbsp;38, 35, 28, 36, 44, 38, 36, 16</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECTION 6: BREAKDOWN -->
+  <div class="section-head">
+    <span class="section-num">Section 6</span>
+    <span class="section-title">Hour-by-hour breakdown — full shift example (2pm–11pm)</span>
+  </div>
+  <div class="breakdown-card">
+    <table class="bk-table">
+      <thead>
+        <tr>
+          <th>Hour</th>
+          <th>Type</th>
+          <th>Bills</th>
+          <th>Δ Buffer</th>
+          <th>Result</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>2pm (14h)</td>
+          <td style="color:var(--text3);font-size:11px">60 min</td>
+          <td style="color:var(--green)">35</td>
+          <td style="color:var(--green)">+3</td>
+          <td style="color:var(--text3);font-size:11px">buf: +3</td>
+        </tr>
+        <tr>
+          <td>3pm (15h)</td>
+          <td style="color:var(--text3);font-size:11px">60 min</td>
+          <td style="color:var(--red)">22</td>
+          <td style="color:var(--red)">−10</td>
+          <td style="color:var(--text3);font-size:11px">buf: −7</td>
+        </tr>
+        <tr>
+          <td>4pm (16h)</td>
+          <td style="color:var(--yellow);font-size:11px">45 min ★ break</td>
+          <td style="color:var(--green)">26</td>
+          <td style="color:var(--green)">+2</td>
+          <td style="color:var(--text3);font-size:11px">buf: −5</td>
+        </tr>
+        <tr>
+          <td>5pm (17h)</td>
+          <td style="color:var(--text3);font-size:11px">60 min</td>
+          <td style="color:var(--green)">33</td>
+          <td style="color:var(--green)">+1</td>
+          <td style="color:var(--text3);font-size:11px">buf: −4</td>
+        </tr>
+        <tr>
+          <td>6pm (18h)</td>
+          <td style="color:var(--yellow);font-size:11px">45 min ★ break</td>
+          <td style="color:var(--purple)">30</td>
+          <td style="color:var(--purple)">+6 (purple)</td>
+          <td style="color:var(--text3);font-size:11px">buf: +2</td>
+        </tr>
+        <tr>
+          <td>7pm (19h)</td>
+          <td style="color:var(--gray);font-size:11px">0 min 🍽 lunch</td>
+          <td style="color:var(--gray)">12</td>
+          <td style="color:var(--gray)">no change</td>
+          <td style="color:var(--text3);font-size:11px">buf: +2</td>
+        </tr>
+        <tr>
+          <td>8pm (20h)</td>
+          <td style="color:var(--text3);font-size:11px">60 min</td>
+          <td style="color:var(--purple)">42</td>
+          <td style="color:var(--purple)">+10 (purple)</td>
+          <td style="color:var(--text3);font-size:11px">buf: +12</td>
+        </tr>
+        <tr>
+          <td>9pm (21h)</td>
+          <td style="color:var(--text3);font-size:11px">60 min</td>
+          <td style="color:var(--green)">34</td>
+          <td style="color:var(--green)">+2</td>
+          <td style="color:var(--text3);font-size:11px">buf: +14</td>
+        </tr>
+        <tr>
+          <td>10pm (22h)</td>
+          <td style="color:var(--text3);font-size:11px">60 min</td>
+          <td style="color:var(--red)">29</td>
+          <td style="color:var(--red)">−3</td>
+          <td style="color:var(--text3);font-size:11px">buf: +11</td>
+        </tr>
+        <tr style="background:var(--bg3)">
+          <td colspan="2" style="color:var(--purple);font-weight:600;padding-top:8px;border-top:1px solid var(--border2)">SHIFT CLOSE →</td>
+          <td style="color:var(--purple);font-weight:600;padding-top:8px;border-top:1px solid var(--border2)">251</td>
+          <td colspan="2" style="color:var(--text2);font-size:11px;padding-top:8px;border-top:1px solid var(--border2)">251 ÷ 7.5 hr = 33.47/hr &nbsp;|&nbsp; buffer: +11 ✓</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="note-small">
+      ★ Break hours (4pm, 6pm): 45 min each — the remaining 15 min do not count.<br>
+      Total productive time: 6 × 60 min + 2 × 45 min = 360 + 90 = 450 min = 7.5 hrs.
+    </div>
+  </div>
+
+  <!-- KEYBOARD SHORTCUTS -->
+  <div class="section-head">
+    <span class="section-num">Controls</span>
+    <span class="section-title">Keyboard shortcuts</span>
+  </div>
+  <div class="shortcuts">
+    <div class="shortcut">
+      <span class="key">Alt + S</span>
+      <div class="shortcut-desc">Add 1 bill to the current hour count. A <strong style="color:var(--text)">10-second timestamp lock</strong> prevents the same press from registering twice — if the system lags or an error occurs, the second trigger within 10 seconds is ignored automatically.</div>
+    </div>
+    <div class="shortcut">
+      <span class="key">F12</span>
+      <div class="shortcut-desc">Remove 1 bill (undo last count). Cannot go below 0.</div>
+    </div>
+    <div class="shortcut">
+      <span class="key">F11</span>
+      <div class="shortcut-desc">Shows a <strong style="color:var(--text)">confirmation dialog</strong> before generating the report — press <strong style="color:var(--text)">Yes</strong> to close and show stats, <strong style="color:var(--text)">No</strong> to cancel and keep the overlay running. Prevents accidental end-of-shift triggers.</div>
+    </div>
+  </div>
+
+  <!-- SAFEGUARDS -->
+  <div class="section-head" style="margin-top:2rem">
+    <span class="section-num">Safeguards</span>
+    <span class="section-title">Built-in protections against errors</span>
+  </div>
+  <div class="cards-2">
+    <div class="card c-green">
+      <div class="badge badge-green">⏱ Alt + S — 10-second lock</div>
+      <div class="card-title">Prevents duplicate bill counts</div>
+      <div class="card-desc">Every time Alt + S is pressed, the tool records a timestamp. If the same key fires again within 10 seconds — due to a system lag, a processing error, or an accidental double-press — the second trigger is silently ignored. The counter only goes up once per valid action.</div>
+      <div style="margin-top:8px; background:#000; border:1px solid #222; border-radius:5px; padding:6px 12px; font-family:'IBM Plex Mono',monospace; font-size:11px; color:#555; line-height:1.8;">
+        <span style="color:#1AE87A;">Press Alt+S</span> → count: 24 → timestamp saved<br>
+        <span style="color:#FF4D4D;">Error retry within 10s</span> → ignored ✓<br>
+        <span style="color:#1AE87A;">Press Alt+S after 10s</span> → count: 25 → OK
+      </div>
+    </div>
+    <div class="card c-yellow">
+      <div class="badge badge-yellow">⚠ F11 — Confirmation dialog</div>
+      <div class="card-title">Prevents accidental shift close</div>
+      <div class="card-desc">Pressing F11 no longer closes the overlay immediately. A dialog appears asking <em style="color:var(--text)">"End shift and generate report?"</em> — confirming with <strong style="color:var(--green)">Yes</strong> generates the report and closes, while <strong style="color:var(--red)">No</strong> dismisses the dialog and the overlay continues running normally.</div>
+      <div style="margin-top:8px; background:#000; border:1px solid #222; border-radius:5px; padding:6px 12px; font-family:'IBM Plex Mono',monospace; font-size:11px; line-height:1.8;">
+        <span style="color:#FFD43B;">F11 pressed</span> → dialog appears<br>
+        <span style="color:#1AE87A;">Yes</span> → report generated, overlay closes<br>
+        <span style="color:#FF4D4D;">No</span> → dialog closes, overlay keeps running
+      </div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- QUICK REFERENCE -->
+  <div class="section-head">
+    <span class="section-num">Quick ref</span>
+    <span class="section-title">All thresholds at a glance</span>
+  </div>
+  <div class="cards">
+    <div class="card">
+      <div class="card-title" style="font-size:12px;color:var(--text3)">Normal hour (60 min)</div>
+      <table style="width:100%;font-size:12px;font-family:var(--mono);margin-top:6px">
+        <tr><td style="color:var(--red);padding:3px 0">&lt; 16 bills</td><td style="color:var(--text3)">Red</td></tr>
+        <tr><td style="color:var(--yellow);padding:3px 0">16–31 bills</td><td style="color:var(--text3)">Yellow</td></tr>
+        <tr><td style="color:var(--green);padding:3px 0">32–34 bills</td><td style="color:var(--text3)">Green</td></tr>
+        <tr><td style="color:var(--purple);padding:3px 0">≥ 35 bills</td><td style="color:var(--text3)">Purple ★</td></tr>
+      </table>
+    </div>
+    <div class="card">
+      <div class="card-title" style="font-size:12px;color:var(--text3)">Break hour (45 min)</div>
+      <table style="width:100%;font-size:12px;font-family:var(--mono);margin-top:6px">
+        <tr><td style="color:var(--red);padding:3px 0">&lt; 12 bills</td><td style="color:var(--text3)">Red</td></tr>
+        <tr><td style="color:var(--yellow);padding:3px 0">12–23 bills</td><td style="color:var(--text3)">Yellow</td></tr>
+        <tr><td style="color:var(--green);padding:3px 0">24–27 bills</td><td style="color:var(--text3)">Green</td></tr>
+        <tr><td style="color:var(--purple);padding:3px 0">≥ 28 bills</td><td style="color:var(--text3)">Purple ★</td></tr>
+      </table>
+    </div>
+    <div class="card">
+      <div class="card-title" style="font-size:12px;color:var(--text3)">Buffer thresholds</div>
+      <table style="width:100%;font-size:12px;font-family:var(--mono);margin-top:6px">
+        <tr><td style="color:var(--red);padding:3px 0">&lt; 0</td><td style="color:var(--text3)">Deficit</td></tr>
+        <tr><td style="color:var(--yellow);padding:3px 0">+1 to +7</td><td style="color:var(--text3)">Slight lead</td></tr>
+        <tr><td style="color:var(--green);padding:3px 0">+8 to +15</td><td style="color:var(--text3)">Good</td></tr>
+        <tr><td style="color:var(--purple);padding:3px 0">≥ +16</td><td style="color:var(--text3)">Excellent</td></tr>
+      </table>
+    </div>
+    <div class="card">
+      <div class="card-title" style="font-size:12px;color:var(--text3)">Lunch hour (7pm)</div>
+      <div class="card-desc" style="margin-top:8px;font-family:var(--mono);font-size:12px;color:var(--gray)">
+        Any count → ignored<br>
+        0 minutes added to time<br>
+        Buffer → unchanged<br>
+        Report → excluded entirely
+      </div>
+    </div>
+  </div>
+
+</div><!-- /main -->
+
+<div class="footer">
+  <span>BPH Counter Overlay — Features &amp; Scenarios Reference &nbsp;·&nbsp; Miguel Alejandro Guerra Sifuentes</span>
+  <span>Biller &nbsp;·&nbsp; 2pm–11pm &nbsp;·&nbsp; Central Transport México &nbsp;|&nbsp; Goal: 32 bills/hr</span>
+</div>
+
+</body>
+</html>
