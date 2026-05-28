@@ -1,0 +1,50 @@
+Private Sub Worksheet_Change(ByVal Target As Range)
+
+    Dim txt As String
+    Dim cleaned As String
+    Dim arr
+    Dim i As Long
+    Dim rowNum As Long
+
+    On Error GoTo Salida
+
+    If Intersect(Target, Me.Range("K2")) Is Nothing Then Exit Sub
+
+    Application.EnableEvents = False
+
+    ' Limpiar resultados anteriores
+    Me.Range("K22:K100").ClearContents
+
+    txt = UCase(Me.Range("K2").Value)
+
+    ' Remover caracteres
+    txt = Replace(txt, ".", "")
+    txt = Replace(txt, "#", "")
+    txt = Replace(txt, ":", "")
+    txt = Replace(txt, "_", "")
+
+    ' Convertir separadores a |
+    txt = Replace(txt, ",", "|")
+    txt = Replace(txt, "/", "|")
+    txt = Replace(txt, vbLf, "|")
+    txt = Replace(txt, " ", "|")
+
+    arr = Split(txt, "|")
+
+    rowNum = 22
+
+    For i = LBound(arr) To UBound(arr)
+
+        cleaned = Trim(arr(i))
+
+        If cleaned <> "" Then
+            Me.Range("K" & rowNum).Value = cleaned
+            rowNum = rowNum + 1
+        End If
+
+    Next i
+
+Salida:
+    Application.EnableEvents = True
+
+End Sub
