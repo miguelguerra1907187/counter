@@ -397,13 +397,12 @@ function Generar-Reporte($log) {
             "OrangeRed"
         }
 
-        # Etiqueta y simbolo
+        # Etiqueta
         $label = Formato-12h $k
-        $sym   = if ($isMEDIA) { " [!]" } elseif ($v -ge $purp_k) { " [*]" } elseif ($v -ge $meta_k) { " [+]" } else { " [-]" }
-        if ($isBreak) { $label = "$label*" }   # asterisco para indicar break
+        $sufijo = if ($isBreak) { " BREAK" } elseif ($isMEDIA) { " [!]" } else { "" }
 
         $pad  = "{0,-7}" -f $label
-        $lines.Add(@{ text = "  $pad $v$sym"; color = $clr })
+        $lines.Add(@{ text = "  $pad $v$sufijo"; color = $clr })
     }
 
     return $lines
