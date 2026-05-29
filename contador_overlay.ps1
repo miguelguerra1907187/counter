@@ -194,15 +194,22 @@ if ($saved.Day -ne $global:lastDay) {
     $global:buffer = $saved.Buffer
     $global:count  = $saved.Count
 } else {
-    if ($saved.Hour -in $LUNCH_HOURS) {
-        $global:buffer = $saved.Buffer
+    # Hora guardada != hora actual: el programa estuvo cerrado y cambio de hora
+    $savedHoraEnTurno = ($saved.Hour -ge $SHIFT_START) -and ($saved.Hour -lt $SHIFT_END)
+    if ($savedHoraEnTurno) {
+        if ($saved.Hour -in $LUNCH_HOURS) {
+            $global:buffer = $saved.Buffer
+        } else {
+            $meta          = if ($saved.Hour -in $BREAK_HOURS) { $GOAL_BREAK } else { $GOAL }
+            $global:buffer = $saved.Buffer + ($saved.Count - $meta)
+        }
+        $missedMins = if ($saved.Hour -in $BREAK_HOURS) { 45 } elseif ($saved.Hour -in $LUNCH_HOURS) { 0 } else { 60 }
+        Save-HourLog $saved.Hour $saved.Count $missedMins
+        Mark-HourClosed $saved.Hour   # marca la hora anterior como cerrada al arrancar en hora nueva
     } else {
-        $meta          = if ($saved.Hour -in $BREAK_HOURS) { $GOAL_BREAK } else { $GOAL }
-        $global:buffer = $saved.Buffer + ($saved.Count - $meta)
+        # Hora guardada fuera de turno (ej: se abrio antes de las 2pm) -- ignorar, no tocar buffer
+        $global:buffer = $saved.Buffer
     }
-    $missedMins = if ($saved.Hour -in $BREAK_HOURS) { 45 } elseif ($saved.Hour -in $LUNCH_HOURS) { 0 } else { 60 }
-    Save-HourLog $saved.Hour $saved.Count $missedMins
-    Mark-HourClosed $saved.Hour   # ← marca la hora anterior como cerrada al arrancar en hora nueva
     $global:count  = 0
     Save-State $global:buffer 0 $global:lastDay $global:lastHour
 }
@@ -356,18 +363,48 @@ function Generar-Reporte($log) {
 
     if ($mejorClave) {
         $lines.Add(@{ text = "--------------------"; color = "DimGray" })
-        $lines.Add(@{ text = "BEST: $(Formato-12h $mejorClave) → $($bills[$mejorClave]) bills"; color = "MediumOrchid" })
+        $lines.Add(@{ text = "BEST: $(Formato-12h $mejorClave) -> $($bills[$mejorClave]) bills"; color = "MediumOrchid" })
         $lines.Add(@{ text = "CONSISTENCY: $([int]$efficiency)%"; color = "Yellow" })
     }
 
-    $entradas     = $bills.GetEnumerator() |
+    # ── BREAKDOWN por hora con color individual ──
+    $entradas = $bills.GetEnumerator() |
         Sort-Object { if ($_.Key -eq "MEDIA") { 9999 } else { [int]$_.Key } } |
         Where-Object { -not ($_.Key -eq "MEDIA" -and $_.Value -eq 0) } |
         Where-Object { $_.Key -notin $lunchStrs }
-    $breakdownTxt = "  " + (($entradas | ForEach-Object { $_.Value }) -join ", ")
+
     $lines.Add(@{ text = "--------------------"; color = "DimGray" })
     $lines.Add(@{ text = "BREAKDOWN";            color = "White" })
-    $lines.Add(@{ text = $breakdownTxt;           color = "Yellow" })
+
+    foreach ($entry in $entradas) {
+        $k = $entry.Key
+        $v = $entry.Value
+        $isBreak = $k -in $breakStrs
+        $isMEDIA = $k -eq "MEDIA"
+        $meta_k  = if ($isBreak) { $GOAL_BREAK } else { $GOAL }
+        $purp_k  = if ($isBreak) { $PURPLE_BREAK } else { $PURPLE_NORMAL }
+
+        # Color segun rendimiento
+        $clr = if ($isMEDIA) {
+            "OrangeRed"   # MEDIA siempre penalizado
+        } elseif ($v -ge $purp_k) {
+            "MediumOrchid"
+        } elseif ($v -ge $meta_k) {
+            "Lime"
+        } elseif ($v -ge [int]($meta_k * 0.5)) {
+            "Yellow"
+        } else {
+            "OrangeRed"
+        }
+
+        # Etiqueta y simbolo
+        $label = Formato-12h $k
+        $sym   = if ($isMEDIA) { " [!]" } elseif ($v -ge $purp_k) { " [*]" } elseif ($v -ge $meta_k) { " [+]" } else { " [-]" }
+        if ($isBreak) { $label = "$label*" }   # asterisco para indicar break
+
+        $pad  = "{0,-7}" -f $label
+        $lines.Add(@{ text = "  $pad $v$sym"; color = $clr })
+    }
 
     return $lines
 }
@@ -382,29 +419,34 @@ function Show-Report {
     $breakStrsR = $BREAK_HOURS | ForEach-Object { "$_" }
     $lunchStrsR = $LUNCH_HOURS | ForEach-Object { "$_" }
 
-    if ($esMedia) {
-        $clave = "MEDIA"
-    } elseif ("$hora" -in $breakStrsR) {
-        $clave       = "$hora"
-        $minsActivos = 45
-    } elseif ("$hora" -in $lunchStrsR) {
-        $clave       = "$hora"
-        $minsActivos = 0
-    } else {
-        $clave = "$hora"
-    }
+    # Solo incluir la hora en curso si está dentro del turno
+    $horaEnTurno = ($hora -ge $SHIFT_START) -and ($hora -lt $SHIFT_END)
 
-    # ── FIX PUNTO 5: solo guardar la hora actual si NO esta cerrada ──
-    # Las horas anteriores ya fueron cerradas por el timer al cambiar de hora,
-    # asi que F11 solo sobreescribe la hora/fraccion en curso.
-    $claveParaCheck = if ($esMedia) { "MEDIA" } else { "$hora" }
-    if (-not (Is-HourClosed $claveParaCheck)) {
-        Save-HourLog $clave $global:count $minsActivos
+    if ($horaEnTurno) {
+        if ($esMedia) {
+            $clave = "MEDIA"
+        } elseif ("$hora" -in $breakStrsR) {
+            $clave       = "$hora"
+            $minsActivos = 45
+        } elseif ("$hora" -in $lunchStrsR) {
+            $clave       = "$hora"
+            $minsActivos = 0
+        } else {
+            $clave = "$hora"
+        }
+
+        # ── FIX PUNTO 5: solo guardar la hora actual si NO esta cerrada ──
+        # Las horas anteriores ya fueron cerradas por el timer al cambiar de hora,
+        # asi que F11 solo sobreescribe la hora/fraccion en curso.
+        $claveParaCheck = if ($esMedia) { "MEDIA" } else { "$hora" }
+        if (-not (Is-HourClosed $claveParaCheck)) {
+            Save-HourLog $clave $global:count $minsActivos
+        }
     }
 
     $log = Load-HourLog
     # Si es MEDIA y todavia no estaba en el log, agregarlo en memoria para el reporte
-    if ($esMedia -and -not $log.ContainsKey("MEDIA")) {
+    if ($horaEnTurno -and $esMedia -and -not $log.ContainsKey("MEDIA")) {
         $log["MEDIA"] = @{ Bills = $global:count; Mins = 30 }
     }
 
@@ -478,12 +520,16 @@ $timer.Add_Tick({
 
     # ── Cambio de hora ──
     if ($nowHour -ne $global:lastHour) {
-        $mins = if ($global:lastHour -in $BREAK_HOURS) { 45 } elseif ($global:lastHour -in $LUNCH_HOURS) { 0 } else { 60 }
-        Save-HourLog $global:lastHour $global:count $mins
-        Mark-HourClosed $global:lastHour   # ← sella la hora que acaba de cerrar
-        if ($global:lastHour -notin $LUNCH_HOURS) {
-            $meta           = if ($global:lastHour -in $BREAK_HOURS) { $GOAL_BREAK } else { $GOAL }
-            $global:buffer += ($global:count - $meta)
+        # Solo procesar horas dentro del turno (SHIFT_START <= hora < SHIFT_END)
+        $horaEnTurno = ($global:lastHour -ge $SHIFT_START) -and ($global:lastHour -lt $SHIFT_END)
+        if ($horaEnTurno) {
+            $mins = if ($global:lastHour -in $BREAK_HOURS) { 45 } elseif ($global:lastHour -in $LUNCH_HOURS) { 0 } else { 60 }
+            Save-HourLog $global:lastHour $global:count $mins
+            Mark-HourClosed $global:lastHour   # ← sella la hora que acaba de cerrar
+            if ($global:lastHour -notin $LUNCH_HOURS) {
+                $meta           = if ($global:lastHour -in $BREAK_HOURS) { $GOAL_BREAK } else { $GOAL }
+                $global:buffer += ($global:count - $meta)
+            }
         }
         $global:count    = 0
         $global:lastHour = $nowHour
