@@ -115,11 +115,12 @@ function Save-State($buffer, $count, $day, $hour) {
     } catch {}
 }
 
-function Save-HourLog($hour, $count, $mins) {
+function Save-HourLog($hour, $count, $mins, $isOT = $false) {
     try {
         if (-not (Test-Path $REG_PATH)) { New-Item -Path $REG_PATH -Force | Out-Null }
         Set-ItemProperty -Path $REG_PATH -Name "Hora$hour" -Value $count
         Set-ItemProperty -Path $REG_PATH -Name "Mins$hour" -Value $mins
+        if ($isOT) { Set-ItemProperty -Path $REG_PATH -Name "OT$hour" -Value 1 }
     } catch {}
 }
 
@@ -146,7 +147,7 @@ function Clear-HourLog {
         if (Test-Path $REG_PATH) {
             $reg = Get-ItemProperty -Path $REG_PATH -ErrorAction Stop
             $reg.PSObject.Properties |
-                Where-Object { $_.Name -match '^(Hora|Mins|Closed)\w+$' } |
+                Where-Object { $_.Name -match '^(Hora|Mins|Closed|OT)\w+$' } |
                 ForEach-Object { Remove-ItemProperty -Path $REG_PATH -Name $_.Name -ErrorAction SilentlyContinue }
         }
     } catch {}
@@ -165,6 +166,7 @@ function Load-HourLog {
                     $log[$h] = @{
                         Bills = [int]$_.Value
                         Mins  = if ($reg.PSObject.Properties["Mins$h"]) { [int]$reg."Mins$h" } else { 60 }
+                        IsOT  = $reg.PSObject.Properties["OT$h"] -ne $null
                     }
                 }
             # Leer hora MEDIA si existe
@@ -172,6 +174,7 @@ function Load-HourLog {
                 $log["MEDIA"] = @{
                     Bills = [int]$reg.HoraMEDIA
                     Mins  = 30
+                    IsOT  = $false
                 }
             }
         }
@@ -185,7 +188,9 @@ $now             = Get-Date
 $global:lastDay  = $now.Day
 $global:lastHour = $now.Hour
 
-if ($saved.Day -ne $global:lastDay) {
+# ── Reset a las 4am del dia siguiente ──
+$resetPorCuatroAm = ($global:lastHour -eq 4) -and ($saved.Day -ne $global:lastDay)
+if ($resetPorCuatroAm -or ($saved.Day -ne $global:lastDay -and $global:lastHour -lt 4)) {
     $global:buffer = 0
     $global:count  = 0
     Clear-HourLog
@@ -195,20 +200,25 @@ if ($saved.Day -ne $global:lastDay) {
     $global:count  = $saved.Count
 } else {
     # Hora guardada != hora actual: el programa estuvo cerrado y cambio de hora
-    $savedHoraEnTurno = ($saved.Hour -ge $SHIFT_START) -and ($saved.Hour -lt $SHIFT_END)
-    if ($savedHoraEnTurno) {
-        if ($saved.Hour -in $LUNCH_HOURS) {
-            $global:buffer = $saved.Buffer
-        } else {
-            $meta          = if ($saved.Hour -in $BREAK_HOURS) { $GOAL_BREAK } else { $GOAL }
-            $global:buffer = $saved.Buffer + ($saved.Count - $meta)
-        }
-        $missedMins = if ($saved.Hour -in $BREAK_HOURS) { 45 } elseif ($saved.Hour -in $LUNCH_HOURS) { 0 } else { 60 }
-        Save-HourLog $saved.Hour $saved.Count $missedMins
-        Mark-HourClosed $saved.Hour   # marca la hora anterior como cerrada al arrancar en hora nueva
-    } else {
-        # Hora guardada fuera de turno (ej: se abrio antes de las 2pm) -- ignorar, no tocar buffer
+    $savedEsOT = ($saved.Hour -lt $SHIFT_START) -or ($saved.Hour -ge $SHIFT_END)
+    if ($saved.Hour -in $LUNCH_HOURS) {
+        # Lunch: no toca buffer, no guarda
         $global:buffer = $saved.Buffer
+    } elseif ($savedEsOT -and $saved.Count -eq 0) {
+        # OT sin trabajo: descartar silenciosamente
+        $global:buffer = $saved.Buffer
+    } elseif ($savedEsOT) {
+        # OT con trabajo: guardar como OT, afecta buffer igual que hora normal
+        $global:buffer = $saved.Buffer + ($saved.Count - $GOAL)
+        Save-HourLog $saved.Hour $saved.Count 60 $true
+        Mark-HourClosed $saved.Hour
+    } else {
+        # Hora dentro del turno
+        $meta          = if ($saved.Hour -in $BREAK_HOURS) { $GOAL_BREAK } else { $GOAL }
+        $global:buffer = $saved.Buffer + ($saved.Count - $meta)
+        $missedMins    = if ($saved.Hour -in $BREAK_HOURS) { 45 } else { 60 }
+        Save-HourLog $saved.Hour $saved.Count $missedMins
+        Mark-HourClosed $saved.Hour
     }
     $global:count  = 0
     Save-State $global:buffer 0 $global:lastDay $global:lastHour
@@ -398,8 +408,9 @@ function Generar-Reporte($log) {
         }
 
         # Etiqueta
-        $label = Formato-12h $k
-        $sufijo = if ($isBreak) { " BREAK" } elseif ($isMEDIA) { " [!]" } else { "" }
+        $label  = Formato-12h $k
+        $isOT   = if ($log[$k].IsOT) { $log[$k].IsOT } else { $false }
+        $sufijo = if ($isBreak) { " BREAK" } elseif ($isMEDIA) { " [!]" } elseif ($isOT) { " OT" } else { "" }
 
         $pad  = "{0,-7}" -f $label
         $lines.Add(@{ text = "  $pad $v$sufijo"; color = $clr })
@@ -418,10 +429,11 @@ function Show-Report {
     $breakStrsR = $BREAK_HOURS | ForEach-Object { "$_" }
     $lunchStrsR = $LUNCH_HOURS | ForEach-Object { "$_" }
 
-    # Solo incluir la hora en curso si está dentro del turno
     $horaEnTurno = ($hora -ge $SHIFT_START) -and ($hora -lt $SHIFT_END)
+    $horaEsOT    = (-not $horaEnTurno) -and ($hora -notin $LUNCH_HOURS)
 
     if ($horaEnTurno) {
+        # ── Hora dentro del turno oficial ──
         if ($esMedia) {
             $clave = "MEDIA"
         } elseif ("$hora" -in $breakStrsR) {
@@ -433,20 +445,33 @@ function Show-Report {
         } else {
             $clave = "$hora"
         }
-
-        # ── FIX PUNTO 5: solo guardar la hora actual si NO esta cerrada ──
-        # Las horas anteriores ya fueron cerradas por el timer al cambiar de hora,
-        # asi que F11 solo sobreescribe la hora/fraccion en curso.
         $claveParaCheck = if ($esMedia) { "MEDIA" } else { "$hora" }
         if (-not (Is-HourClosed $claveParaCheck)) {
             Save-HourLog $clave $global:count $minsActivos
         }
+    } elseif ($horaEsOT -and $global:count -gt 0) {
+        # ── Hora OT con trabajo: guardar si no esta cerrada ──
+        # Aplica logica de cuartos igual que horas normales
+        if ($esMedia) {
+            $clave = "MEDIA"
+        } else {
+            $clave       = "$hora"
+            $minsActivos = $minsActivos   # ya calculado por Redondear-AcuartO
+        }
+        $claveParaCheck = if ($esMedia) { "MEDIA" } else { "$hora" }
+        if (-not (Is-HourClosed $claveParaCheck)) {
+            Save-HourLog $clave $global:count $minsActivos $true
+        }
     }
 
     $log = Load-HourLog
-    # Si es MEDIA y todavia no estaba en el log, agregarlo en memoria para el reporte
+    # Si es MEDIA fuera de turno con trabajo, agregar en memoria
+    if ($horaEsOT -and $esMedia -and $global:count -gt 0 -and -not $log.ContainsKey("MEDIA")) {
+        $log["MEDIA"] = @{ Bills = $global:count; Mins = 30; IsOT = $true }
+    }
+    # Si es MEDIA dentro del turno, agregar en memoria
     if ($horaEnTurno -and $esMedia -and -not $log.ContainsKey("MEDIA")) {
-        $log["MEDIA"] = @{ Bills = $global:count; Mins = 30 }
+        $log["MEDIA"] = @{ Bills = $global:count; Mins = 30; IsOT = $false }
     }
 
     $lines = Generar-Reporte $log
@@ -505,8 +530,8 @@ $timer.Add_Tick({
     $nowHour = $now.Hour
     $nowDay  = $now.Day
 
-    # ── Cambio de dia ──
-    if ($nowDay -ne $global:lastDay) {
+    # ── Reset a las 4am del dia siguiente ──
+    if ($nowHour -eq 4 -and $nowDay -ne $global:lastDay) {
         $global:count    = 0
         $global:buffer   = 0
         $global:lastHour = $nowHour
@@ -519,17 +544,29 @@ $timer.Add_Tick({
 
     # ── Cambio de hora ──
     if ($nowHour -ne $global:lastHour) {
-        # Solo procesar horas dentro del turno (SHIFT_START <= hora < SHIFT_END)
-        $horaEnTurno = ($global:lastHour -ge $SHIFT_START) -and ($global:lastHour -lt $SHIFT_END)
-        if ($horaEnTurno) {
-            $mins = if ($global:lastHour -in $BREAK_HOURS) { 45 } elseif ($global:lastHour -in $LUNCH_HOURS) { 0 } else { 60 }
-            Save-HourLog $global:lastHour $global:count $mins
-            Mark-HourClosed $global:lastHour   # ← sella la hora que acaba de cerrar
-            if ($global:lastHour -notin $LUNCH_HOURS) {
-                $meta           = if ($global:lastHour -in $BREAK_HOURS) { $GOAL_BREAK } else { $GOAL }
-                $global:buffer += ($global:count - $meta)
+        $esOT    = ($global:lastHour -lt $SHIFT_START) -or ($global:lastHour -ge $SHIFT_END)
+        $esLunch = $global:lastHour -in $LUNCH_HOURS
+        $esBreak = $global:lastHour -in $BREAK_HOURS
+
+        if ($esLunch) {
+            # Lunch: no guarda, no toca buffer
+        } elseif ($esOT) {
+            # OT: solo guardar si hubo trabajo real
+            if ($global:count -gt 0) {
+                Save-HourLog $global:lastHour $global:count 60 $true
+                Mark-HourClosed $global:lastHour
+                $global:buffer += ($global:count - $GOAL)
             }
+            # Si count=0: descarte silencioso, sin penalizacion
+        } else {
+            # Hora normal dentro del turno
+            $mins = if ($esBreak) { 45 } else { 60 }
+            Save-HourLog $global:lastHour $global:count $mins
+            Mark-HourClosed $global:lastHour
+            $meta           = if ($esBreak) { $GOAL_BREAK } else { $GOAL }
+            $global:buffer += ($global:count - $meta)
         }
+
         $global:count    = 0
         $global:lastHour = $nowHour
         Save-State $global:buffer 0 $nowDay $nowHour
