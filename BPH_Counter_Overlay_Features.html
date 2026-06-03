@@ -31,6 +31,9 @@
     --purple-bg:   #120f2a;
     --gray:        #555A6B;
     --gray-bg:     #13151a;
+    --orange:      #FF9500;
+    --orange-dim:  #8A5000;
+    --orange-bg:   #1a0e00;
     --mono:        'IBM Plex Mono', monospace;
     --sans:        'IBM Plex Sans', sans-serif;
     --radius:      10px;
@@ -164,6 +167,7 @@
   .card.c-red    { border-left: 3px solid var(--red);    border-radius: 0 var(--radius-lg) var(--radius-lg) 0; }
   .card.c-purple { border-left: 3px solid var(--purple); border-radius: 0 var(--radius-lg) var(--radius-lg) 0; }
   .card.c-gray   { border-left: 3px solid var(--gray);   border-radius: 0 var(--radius-lg) var(--radius-lg) 0; }
+  .card.c-orange { border-left: 3px solid var(--orange); border-radius: 0 var(--radius-lg) var(--radius-lg) 0; }
 
   .badge {
     display: inline-flex;
@@ -183,6 +187,7 @@
   .badge-red    { background: var(--red-bg);    color: var(--red);    border: 1px solid var(--red-dim);    }
   .badge-purple { background: var(--purple-bg); color: var(--purple); border: 1px solid var(--purple-dim); }
   .badge-gray   { background: var(--gray-bg);   color: var(--gray);   border: 1px solid #2e323d;           }
+  .badge-orange { background: var(--orange-bg); color: var(--orange); border: 1px solid var(--orange-dim); }
 
   .card-title { font-size: 13px; font-weight: 600; color: var(--text); }
   .card-desc  { font-size: 12px; color: var(--text2); line-height: 1.6; }
@@ -208,6 +213,7 @@
   .or { color: #FF4D4D; }
   .op { color: #B09EFF; }
   .od { color: #444; }
+  .oo { color: #FF9500; }
 
   /* ── REPORT MOCK ── */
   .report-wrap {
@@ -510,6 +516,16 @@
       <div class="step-title">Handles shift exceptions</div>
       <div class="step-desc">Break hours (4pm, 6pm) have a reduced goal of 24. The 7pm lunch hour is completely excluded — it neither adds nor removes from the score.</div>
     </div>
+    <div class="how-step">
+      <div class="step-num">07</div>
+      <div class="step-title">Smart overtime detection</div>
+      <div class="step-desc">Hours worked outside the official shift are tracked as <strong style="color:var(--orange)">OT</strong>. If you open the tool early but don't register any bills, that hour is silently discarded. If you do work, it counts fully — affecting AVG, buffer, and appearing tagged in the report.</div>
+    </div>
+    <div class="how-step">
+      <div class="step-num">08</div>
+      <div class="step-title">Auto-reset at 4am</div>
+      <div class="step-desc">If the tool is left open overnight — PC in sleep mode, forgot to press F11 — the counter resets automatically at 4am, so the next shift always starts clean with no leftover data.</div>
+    </div>
   </div>
 
   <!-- SHIFT STRUCTURE -->
@@ -639,6 +655,44 @@
     </div>
   </div>
 
+  <!-- SECTION 3B: OVERTIME -->
+  <div class="section-head">
+    <span class="section-num">Section 3B</span>
+    <span class="section-title">Overtime hours — outside the official shift</span>
+  </div>
+  <div class="info-box" style="border-left-color: var(--orange);">
+    Any hour worked <strong>before 2pm or after 11pm</strong> is treated as overtime. The tool detects it automatically — no setup required. <strong>If you open the program early and register nothing, that hour is discarded silently.</strong> If you register at least 1 bill, the hour counts fully: same goal of 32, same color thresholds, affects buffer and AVG just like any other hour. The report marks it with <strong style="color:var(--orange)">OT</strong> so you can distinguish it from your regular shift.
+  </div>
+  <div class="cards-3">
+    <div class="card c-orange">
+      <div class="badge badge-orange">⚡ OT — Open early, no work</div>
+      <div class="card-title">Opened at 1:55pm, zero bills registered</div>
+      <div class="card-desc">The 1pm hour closes with count=0 when 2pm arrives. It is discarded silently — no penalty, no entry in the report. The shift starts clean at 2pm.</div>
+      <div class="overlay-wrap">
+        <div class="overlay-label">1pm hour — discarded, shift starts clean</div>
+        <div class="overlay-mock"><span class="og">0</span><span class="sep">|</span><span class="od">+0</span></div>
+      </div>
+    </div>
+    <div class="card c-orange">
+      <div class="badge badge-orange">⚡ OT — Arrived 1hr early with work</div>
+      <div class="card-title">Started at 1pm, registered 28 bills</div>
+      <div class="card-desc">1pm OT hour with 28 bills (Δ −4). Counts fully — affects buffer and AVG. Appears in report breakdown as <strong style="color:var(--orange)">28 OT</strong>.</div>
+      <div class="overlay-wrap">
+        <div class="overlay-label">Overlay during 1pm OT hour</div>
+        <div class="overlay-mock"><span class="oy">28</span><span class="sep">|</span><span class="or">-4</span></div>
+      </div>
+    </div>
+    <div class="card c-orange">
+      <div class="badge badge-orange">⚡ OT — Stayed late after 11pm</div>
+      <div class="card-title">Worked until 1am — crosses midnight</div>
+      <div class="card-desc">11pm and 12am are both OT. The program survives midnight without losing data. Press F11 before 4am to get the full report including the OT hours.</div>
+      <div class="overlay-wrap">
+        <div class="overlay-label">Overlay at 12am — still tracking</div>
+        <div class="overlay-mock"><span class="oy">28</span><span class="sep">|</span><span class="or">-3</span></div>
+      </div>
+    </div>
+  </div>
+
   <!-- SECTION 4: BUFFER -->
   <div class="section-head">
     <span class="section-num">Section 4</span>
@@ -703,7 +757,14 @@
         <span class="ry">CONSISTENCY: 79%</span><br>
         <span class="rd">────────────────────</span><br>
         <span class="rw">BREAKDOWN</span><br>
-        <span class="ry">&nbsp;&nbsp;35, 28, 26, 30, 42, 34, 30, 26</span>
+        <span class="rp">&nbsp;&nbsp;2pm&nbsp;&nbsp;&nbsp;&nbsp; 35</span><br>
+        <span class="ry">&nbsp;&nbsp;3pm&nbsp;&nbsp;&nbsp;&nbsp; 28</span><br>
+        <span class="rg">&nbsp;&nbsp;4pm&nbsp;&nbsp;&nbsp;&nbsp; 26 BREAK</span><br>
+        <span class="rg">&nbsp;&nbsp;5pm&nbsp;&nbsp;&nbsp;&nbsp; 33</span><br>
+        <span class="ry">&nbsp;&nbsp;6pm&nbsp;&nbsp;&nbsp;&nbsp; 20 BREAK</span><br>
+        <span class="rp">&nbsp;&nbsp;8pm&nbsp;&nbsp;&nbsp;&nbsp; 42</span><br>
+        <span class="rg">&nbsp;&nbsp;9pm&nbsp;&nbsp;&nbsp;&nbsp; 34</span><br>
+        <span class="ry">&nbsp;&nbsp;10pm&nbsp;&nbsp;&nbsp; 29</span>
       </div>
     </div>
     <!-- SCENARIO B -->
@@ -725,7 +786,14 @@
         <span class="ry">CONSISTENCY: 76%</span><br>
         <span class="rd">────────────────────</span><br>
         <span class="rw">BREAKDOWN</span><br>
-        <span class="ry">&nbsp;&nbsp;22, 25, 20, 28, 38, 30, 27, 28</span>
+        <span class="rr">&nbsp;&nbsp;2pm&nbsp;&nbsp;&nbsp;&nbsp; 22</span><br>
+        <span class="ry">&nbsp;&nbsp;3pm&nbsp;&nbsp;&nbsp;&nbsp; 25</span><br>
+        <span class="rg">&nbsp;&nbsp;4pm&nbsp;&nbsp;&nbsp;&nbsp; 20 BREAK</span><br>
+        <span class="ry">&nbsp;&nbsp;5pm&nbsp;&nbsp;&nbsp;&nbsp; 28</span><br>
+        <span class="ry">&nbsp;&nbsp;6pm&nbsp;&nbsp;&nbsp;&nbsp; 18 BREAK</span><br>
+        <span class="rp">&nbsp;&nbsp;8pm&nbsp;&nbsp;&nbsp;&nbsp; 38</span><br>
+        <span class="rg">&nbsp;&nbsp;9pm&nbsp;&nbsp;&nbsp;&nbsp; 30</span><br>
+        <span class="ry">&nbsp;&nbsp;10pm&nbsp;&nbsp;&nbsp; 27</span>
       </div>
     </div>
   </div>
@@ -749,7 +817,11 @@
         <span class="rp">BEST: 2pm → 35 bills</span><br>
         <span class="rd">────────────────────</span><br>
         <span class="rw">BREAKDOWN</span><br>
-        <span class="ry">&nbsp;&nbsp;35, 28, 26, 30, 35</span>
+        <span class="rp">&nbsp;&nbsp;2pm&nbsp;&nbsp;&nbsp;&nbsp; 35</span><br>
+        <span class="ry">&nbsp;&nbsp;3pm&nbsp;&nbsp;&nbsp;&nbsp; 28</span><br>
+        <span class="rg">&nbsp;&nbsp;4pm&nbsp;&nbsp;&nbsp;&nbsp; 26 BREAK</span><br>
+        <span class="rg">&nbsp;&nbsp;5pm&nbsp;&nbsp;&nbsp;&nbsp; 33</span><br>
+        <span class="rp">&nbsp;&nbsp;6pm&nbsp;&nbsp;&nbsp;&nbsp; 35</span>
       </div>
     </div>
     <!-- SCENARIO D -->
@@ -771,7 +843,77 @@
         <span class="ry">CONSISTENCY: 96%</span><br>
         <span class="rd">────────────────────</span><br>
         <span class="rw">BREAKDOWN</span><br>
-        <span class="rp">&nbsp;&nbsp;38, 35, 28, 36, 44, 38, 36, 16</span>
+        <span class="rp">&nbsp;&nbsp;2pm&nbsp;&nbsp;&nbsp;&nbsp; 38</span><br>
+        <span class="rp">&nbsp;&nbsp;3pm&nbsp;&nbsp;&nbsp;&nbsp; 35</span><br>
+        <span class="rg">&nbsp;&nbsp;4pm&nbsp;&nbsp;&nbsp;&nbsp; 28 BREAK</span><br>
+        <span class="rp">&nbsp;&nbsp;5pm&nbsp;&nbsp;&nbsp;&nbsp; 36</span><br>
+        <span class="rp">&nbsp;&nbsp;6pm&nbsp;&nbsp;&nbsp;&nbsp; 30 BREAK</span><br>
+        <span class="rp">&nbsp;&nbsp;8pm&nbsp;&nbsp;&nbsp;&nbsp; 44</span><br>
+        <span class="rp">&nbsp;&nbsp;9pm&nbsp;&nbsp;&nbsp;&nbsp; 38</span><br>
+        <span class="rp">&nbsp;&nbsp;10pm&nbsp;&nbsp;&nbsp; 36</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCENARIO E: OT -->
+  <div class="cards-2" style="margin-top:12px">
+    <div class="card c-orange">
+      <div class="badge badge-orange">⚡ Scenario E — Shift with OT before</div>
+      <div class="card-title">Worked 1pm–11pm — 1hr OT before official shift</div>
+      <div class="card-desc">1pm OT hour with 28 bills counts fully. Official shift 2pm–11pm runs normal. Total = 9.5 active hrs. The OT hour appears tagged in the breakdown.</div>
+      <div class="report-wrap">
+        <span class="rw">BPH STATS</span><br>
+        <span class="rd">───────────────</span><br>
+        <span class="rg">[OK] ON TRACK</span><br>
+        <span class="rg">AVG: 32.84/hr</span><br>
+        <span class="rw">TOTAL: 313 bills</span><br>
+        <span class="rw">TIME: 9.5hr</span><br>
+        <span class="rd">────────────────────</span><br>
+        <span class="rg">[+] BUFFER: +9</span><br>
+        <span class="rd">────────────────────</span><br>
+        <span class="rp">BEST: 8pm → 42 bills</span><br>
+        <span class="ry">CONSISTENCY: 78%</span><br>
+        <span class="rd">────────────────────</span><br>
+        <span class="rw">BREAKDOWN</span><br>
+        <span class="ry">&nbsp;&nbsp;1pm&nbsp;&nbsp;&nbsp;&nbsp; 28 OT</span><br>
+        <span class="rp">&nbsp;&nbsp;2pm&nbsp;&nbsp;&nbsp;&nbsp; 35</span><br>
+        <span class="ry">&nbsp;&nbsp;3pm&nbsp;&nbsp;&nbsp;&nbsp; 28</span><br>
+        <span class="rg">&nbsp;&nbsp;4pm&nbsp;&nbsp;&nbsp;&nbsp; 26 BREAK</span><br>
+        <span class="rg">&nbsp;&nbsp;5pm&nbsp;&nbsp;&nbsp;&nbsp; 33</span><br>
+        <span class="ry">&nbsp;&nbsp;6pm&nbsp;&nbsp;&nbsp;&nbsp; 20 BREAK</span><br>
+        <span class="rp">&nbsp;&nbsp;8pm&nbsp;&nbsp;&nbsp;&nbsp; 42</span><br>
+        <span class="rg">&nbsp;&nbsp;9pm&nbsp;&nbsp;&nbsp;&nbsp; 34</span><br>
+        <span class="ry">&nbsp;&nbsp;10pm&nbsp;&nbsp;&nbsp; 29</span>
+      </div>
+    </div>
+    <div class="card c-orange">
+      <div class="badge badge-orange">⚡ Scenario F — Shift with OT after, crosses midnight</div>
+      <div class="card-title">Worked 2pm–1am — 2hr OT after official shift</div>
+      <div class="card-desc">Official shift ends at 11pm. Stayed until 1am with 30 and 28 bills. Both OT hours count fully. 4am auto-reset will clear the data if F11 is not pressed before then.</div>
+      <div class="report-wrap">
+        <span class="rw">BPH STATS</span><br>
+        <span class="rd">───────────────</span><br>
+        <span class="rr">[!!] BELOW GOAL</span><br>
+        <span class="rr">AVG: 31.79/hr</span><br>
+        <span class="rw">TOTAL: 338 bills</span><br>
+        <span class="rw">TIME: 10.5hr</span><br>
+        <span class="rd">────────────────────</span><br>
+        <span class="rr">[-] MISSING: 7</span><br>
+        <span class="rd">────────────────────</span><br>
+        <span class="rp">BEST: 8pm → 42 bills</span><br>
+        <span class="ry">CONSISTENCY: 76%</span><br>
+        <span class="rd">────────────────────</span><br>
+        <span class="rw">BREAKDOWN</span><br>
+        <span class="rp">&nbsp;&nbsp;2pm&nbsp;&nbsp;&nbsp;&nbsp; 35</span><br>
+        <span class="ry">&nbsp;&nbsp;3pm&nbsp;&nbsp;&nbsp;&nbsp; 28</span><br>
+        <span class="rg">&nbsp;&nbsp;4pm&nbsp;&nbsp;&nbsp;&nbsp; 26 BREAK</span><br>
+        <span class="rg">&nbsp;&nbsp;5pm&nbsp;&nbsp;&nbsp;&nbsp; 33</span><br>
+        <span class="ry">&nbsp;&nbsp;6pm&nbsp;&nbsp;&nbsp;&nbsp; 20 BREAK</span><br>
+        <span class="rp">&nbsp;&nbsp;8pm&nbsp;&nbsp;&nbsp;&nbsp; 42</span><br>
+        <span class="rg">&nbsp;&nbsp;9pm&nbsp;&nbsp;&nbsp;&nbsp; 34</span><br>
+        <span class="ry">&nbsp;&nbsp;10pm&nbsp;&nbsp;&nbsp; 29</span><br>
+        <span class="oo">&nbsp;&nbsp;11pm&nbsp;&nbsp;&nbsp; 30 OT</span><br>
+        <span class="oo">&nbsp;&nbsp;12am&nbsp;&nbsp;&nbsp; 28 OT</span>
       </div>
     </div>
   </div>
@@ -779,7 +921,7 @@
   <!-- SECTION 6: BREAKDOWN -->
   <div class="section-head">
     <span class="section-num">Section 6</span>
-    <span class="section-title">Hour-by-hour breakdown — full shift example (2pm–11pm)</span>
+    <span class="section-title">Hour-by-hour breakdown — full shift with OT example</span>
   </div>
   <div class="breakdown-card">
     <table class="bk-table">
@@ -793,6 +935,13 @@
         </tr>
       </thead>
       <tbody>
+        <tr>
+          <td style="color:var(--orange)">1pm (13h)</td>
+          <td style="color:var(--orange);font-size:11px">60 min ⚡ OT</td>
+          <td style="color:var(--yellow)">28</td>
+          <td style="color:var(--red)">−4</td>
+          <td style="color:var(--text3);font-size:11px">buf: −4</td>
+        </tr>
         <tr>
           <td>2pm (14h)</td>
           <td style="color:var(--text3);font-size:11px">60 min</td>
@@ -856,16 +1005,25 @@
           <td style="color:var(--red)">−3</td>
           <td style="color:var(--text3);font-size:11px">buf: +11</td>
         </tr>
+        <tr>
+          <td style="color:var(--orange)">11pm (23h)</td>
+          <td style="color:var(--orange);font-size:11px">60 min ⚡ OT</td>
+          <td style="color:var(--yellow)">29</td>
+          <td style="color:var(--red)">−3</td>
+          <td style="color:var(--text3);font-size:11px">buf: +8</td>
+        </tr>
         <tr style="background:var(--bg3)">
           <td colspan="2" style="color:var(--purple);font-weight:600;padding-top:8px;border-top:1px solid var(--border2)">SHIFT CLOSE →</td>
-          <td style="color:var(--purple);font-weight:600;padding-top:8px;border-top:1px solid var(--border2)">251</td>
-          <td colspan="2" style="color:var(--text2);font-size:11px;padding-top:8px;border-top:1px solid var(--border2)">251 ÷ 7.5 hr = 33.47/hr &nbsp;|&nbsp; buffer: +11 ✓</td>
+          <td style="color:var(--purple);font-weight:600;padding-top:8px;border-top:1px solid var(--border2)">308</td>
+          <td colspan="2" style="color:var(--text2);font-size:11px;padding-top:8px;border-top:1px solid var(--border2)">308 ÷ 10hr = 30.8/hr &nbsp;|&nbsp; buffer: +8 ✓ (incl. 2hr OT)</td>
         </tr>
       </tbody>
     </table>
     <div class="note-small">
       ★ Break hours (4pm, 6pm): 45 min each — the remaining 15 min do not count.<br>
-      Total productive time: 6 × 60 min + 2 × 45 min = 360 + 90 = 450 min = 7.5 hrs.
+      ⚡ OT hours (outside 2pm–11pm): count fully at goal=32 if bills &gt; 0. If count=0, discarded silently.<br>
+      🍽 Lunch (7pm): 0 active minutes, buffer frozen, excluded from report entirely.<br>
+      🔄 Auto-reset: if the program is left open overnight, it resets automatically at 4am.
     </div>
   </div>
 
@@ -917,6 +1075,30 @@
     </div>
   </div>
 
+  <!-- SAFEGUARD: 4AM RESET -->
+  <div class="cards-2" style="margin-top:12px">
+    <div class="card c-green" style="margin-top:0">
+      <div class="badge badge-green">🔄 4am auto-reset</div>
+      <div class="card-title">Overnight protection — counter resets at 4am</div>
+      <div class="card-desc">If the program is left open overnight — PC in sleep mode, forgot to press F11 — the counter and all history reset automatically at 4am. The next shift always starts with a clean slate. If you worked OT until 3am, press F11 before 4am to capture the full report before the reset fires.</div>
+      <div style="margin-top:8px; background:#000; border:1px solid #222; border-radius:5px; padding:6px 12px; font-family:'IBM Plex Mono',monospace; font-size:11px; color:#555; line-height:1.8;">
+        <span style="color:#FFD43B;">Forgot F11, PC in sleep</span> → program still open<br>
+        <span style="color:#FF4D4D;">4:00am arrives</span> → counter resets to 0<br>
+        <span style="color:#1AE87A;">Next shift opens clean</span> → no leftover data ✓
+      </div>
+    </div>
+    <div class="card c-orange">
+      <div class="badge badge-orange">⚡ OT zero-count discard</div>
+      <div class="card-title">Opened the tool early but didn't work — zero penalty</div>
+      <div class="card-desc">If you open the overlay before your shift starts and don't press Alt+S at all, the pre-shift hour is silently discarded when the next hour begins. No penalty, no entry in the report, no impact on the buffer. The same applies to any post-shift hour where you registered nothing.</div>
+      <div style="margin-top:8px; background:#000; border:1px solid #222; border-radius:5px; padding:6px 12px; font-family:'IBM Plex Mono',monospace; font-size:11px; color:#555; line-height:1.8;">
+        <span style="color:#FFD43B;">Open at 1:55pm, count = 0</span><br>
+        <span style="color:#1AE87A;">2pm arrives</span> → 1pm hour discarded ✓<br>
+        <span style="color:#1AE87A;">Shift starts clean at 2pm</span> → no impact ✓
+      </div>
+    </div>
+  </div>
+
   <hr class="divider">
 
   <!-- QUICK REFERENCE -->
@@ -960,6 +1142,17 @@
         Buffer → unchanged<br>
         Report → excluded entirely
       </div>
+    </div>
+    <div class="card">
+      <div class="card-title" style="font-size:12px;color:var(--orange)">OT hour (outside 2pm–11pm)</div>
+      <table style="width:100%;font-size:12px;font-family:var(--mono);margin-top:6px">
+        <tr><td style="color:var(--gray);padding:3px 0">0 bills</td><td style="color:var(--text3)">Discarded silently</td></tr>
+        <tr><td style="color:var(--red);padding:3px 0">&lt; 16 bills</td><td style="color:var(--text3)">Red — counts</td></tr>
+        <tr><td style="color:var(--yellow);padding:3px 0">16–31 bills</td><td style="color:var(--text3)">Yellow — counts</td></tr>
+        <tr><td style="color:var(--green);padding:3px 0">32–34 bills</td><td style="color:var(--text3)">Green — counts</td></tr>
+        <tr><td style="color:var(--purple);padding:3px 0">≥ 35 bills</td><td style="color:var(--text3)">Purple ★ — counts</td></tr>
+      </table>
+      <div style="margin-top:6px;font-size:11px;color:var(--text3);font-family:var(--mono)">Tagged as OT in report. Goal = 32. Resets at 4am if F11 not pressed.</div>
     </div>
   </div>
 
