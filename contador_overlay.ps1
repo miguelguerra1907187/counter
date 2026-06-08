@@ -189,8 +189,9 @@ $global:lastDay  = $now.Day
 $global:lastHour = $now.Hour
 
 # ── Reset a las 4am del dia siguiente ──
-$resetPorCuatroAm = ($global:lastHour -eq 4) -and ($saved.Day -ne $global:lastDay)
-if ($resetPorCuatroAm -or ($saved.Day -ne $global:lastDay -and $global:lastHour -lt 4)) {
+# Reset si ya paso las 4am del dia siguiente (cubre suspension y reinicios tardios)
+$resetPorCuatroAm = ($global:lastHour -ge 4) -and ($saved.Day -ne $global:lastDay)
+if ($resetPorCuatroAm) {
     $global:buffer = 0
     $global:count  = 0
     Clear-HourLog
@@ -514,9 +515,36 @@ function Show-Report {
         $rRtb.AppendText("$txt`n")
     }
 
-    # Click en cualquier parte cierra
-    $rForm.Add_Click({ $rForm.Close() })
-    $rRtb.Add_Click({ $rForm.Close() })
+    # ── Accion de cierre: resetea todo y overlay sigue corriendo ──
+    $closeAction = {
+        $rForm.Close()
+        $global:count    = 0
+        $global:buffer   = 0
+        $global:lastHour = (Get-Date).Hour
+        $global:lastDay  = (Get-Date).Day
+        Clear-HourLog
+        Save-State 0 0 $global:lastDay $global:lastHour
+        Update-Display
+    }
+
+    # Click en cualquier parte del reporte → cierra y resetea
+    $rForm.Add_Click($closeAction)
+    $rRtb.Add_Click($closeAction)
+
+    # F11 estando el reporte visible → cierra y resetea
+    $rForm.Add_KeyDown({
+        param($s, $e)
+        if ($e.KeyCode -eq [System.Windows.Forms.Keys]::F11) {
+            & $closeAction
+        }
+    })
+    $rRtb.Add_KeyDown({
+        param($s, $e)
+        if ($e.KeyCode -eq [System.Windows.Forms.Keys]::F11) {
+            & $closeAction
+        }
+    })
+    $rForm.KeyPreview = $true
 
     [void]$rForm.ShowDialog()
 }
@@ -530,8 +558,8 @@ $timer.Add_Tick({
     $nowHour = $now.Hour
     $nowDay  = $now.Day
 
-    # ── Reset a las 4am del dia siguiente ──
-    if ($nowHour -eq 4 -and $nowDay -ne $global:lastDay) {
+    # ── Reset al despertar de suspension si ya paso las 4am del dia siguiente ──
+    if ($nowHour -ge 4 -and $nowDay -ne $global:lastDay) {
         $global:count    = 0
         $global:buffer   = 0
         $global:lastHour = $nowHour
@@ -615,7 +643,9 @@ $timer.Add_Tick({
             )
             if ($confirm -eq [System.Windows.Forms.DialogResult]::Yes) {
                 Show-Report
-                $form.Invoke([Action]{ $form.Close() })
+                # El reset lo hace el closeAction dentro de Show-Report
+                # El overlay sigue corriendo — solo reiniciamos el timer
+                $timer.Start()
             } else {
                 $timer.Start()
             }
