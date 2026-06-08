@@ -504,7 +504,7 @@
     <div class="how-step">
       <div class="step-num">04</div>
       <div class="step-title">Generates a shift report</div>
-      <div class="step-desc">At the end of the shift, pressing <strong style="color:var(--text)">F11</strong> shows a complete summary: average rate, total bills, buffer, best hour, and breakdown.</div>
+      <div class="step-desc">At any point, pressing <strong style="color:var(--text)">F11</strong> shows a complete summary: average rate, total bills, buffer, best hour, and breakdown. After viewing, press <strong style="color:var(--text)">F11</strong> again or click the report to close it — the overlay resets to zero and keeps running for the next shift.</div>
     </div>
     <div class="how-step">
       <div class="step-num">05</div>
@@ -734,7 +734,7 @@
     <span class="section-title">End-of-shift report (F11) — all possible scenarios</span>
   </div>
   <div class="info-box" style="border-left-color: var(--purple);">
-    Pressing <strong>F11</strong> at any point in the shift generates the report. It automatically detects what fraction of the current hour is complete, applies the appropriate time weight, and calculates the final average and buffer. The report then closes the overlay.
+    Pressing <strong>F11</strong> at any point generates the report. It automatically detects what fraction of the current hour is complete, applies the appropriate time weight, and calculates the final average and buffer. <strong>The overlay keeps running</strong> while you view the report. Closing the report — by clicking it or pressing <strong>F11</strong> again — resets everything to zero so the next shift starts clean.
   </div>
 
   <div class="cards-2" style="margin-bottom:12px">
@@ -1043,7 +1043,7 @@
     </div>
     <div class="shortcut">
       <span class="key">F11</span>
-      <div class="shortcut-desc">Shows a <strong style="color:var(--text)">confirmation dialog</strong> before generating the report — press <strong style="color:var(--text)">Yes</strong> to close and show stats, <strong style="color:var(--text)">No</strong> to cancel and keep the overlay running. Prevents accidental end-of-shift triggers.</div>
+      <div class="shortcut-desc">Shows a <strong style="color:var(--text)">confirmation dialog</strong> — press <strong style="color:var(--text)">Yes</strong> to show the report (overlay keeps running behind it), <strong style="color:var(--text)">No</strong> to cancel. Once the report is visible, press <strong style="color:var(--text)">F11</strong> again or click anywhere on it to close and reset the counter to zero.</div>
     </div>
   </div>
 
@@ -1064,13 +1064,14 @@
       </div>
     </div>
     <div class="card c-yellow">
-      <div class="badge badge-yellow">⚠ F11 — Confirmation dialog</div>
-      <div class="card-title">Prevents accidental shift close</div>
-      <div class="card-desc">Pressing F11 no longer closes the overlay immediately. A dialog appears asking <em style="color:var(--text)">"End shift and generate report?"</em> — confirming with <strong style="color:var(--green)">Yes</strong> generates the report and closes, while <strong style="color:var(--red)">No</strong> dismisses the dialog and the overlay continues running normally.</div>
+      <div class="badge badge-yellow">⚠ F11 — Report & reset flow</div>
+      <div class="card-title">View report, then reset — overlay always keeps running</div>
+      <div class="card-desc">Pressing F11 shows a confirmation dialog. Confirming opens the report while the overlay continues running behind it. The report stays visible as long as you need. Closing it — by clicking anywhere on it or pressing <strong style="color:var(--green)">F11</strong> again — resets the counter, buffer, and log to zero. The overlay is immediately ready for the next shift.</div>
       <div style="margin-top:8px; background:#000; border:1px solid #222; border-radius:5px; padding:6px 12px; font-family:'IBM Plex Mono',monospace; font-size:11px; line-height:1.8;">
-        <span style="color:#FFD43B;">F11 pressed</span> → dialog appears<br>
-        <span style="color:#1AE87A;">Yes</span> → report generated, overlay closes<br>
-        <span style="color:#FF4D4D;">No</span> → dialog closes, overlay keeps running
+        <span style="color:#FFD43B;">F11 pressed</span> → confirmation dialog<br>
+        <span style="color:#1AE87A;">Yes</span> → report shown, overlay keeps running<br>
+        <span style="color:#1AE87A;">F11 or click on report</span> → reset to 0, ready for next shift<br>
+        <span style="color:#FF4D4D;">No in dialog</span> → cancelled, overlay unchanged
       </div>
     </div>
   </div>
