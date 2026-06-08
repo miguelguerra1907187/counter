@@ -281,10 +281,17 @@ Update-Display
 
 function Redondear-AcuartO($minutos) {
     # Devuelve [mins_activos, es_media]
-    if ($minutos -le 7 -or $minutos -ge 53) { return 60, $false }
-    elseif ($minutos -le 22)                { return 15, $false }
-    elseif ($minutos -le 37)               { return 30, $true  }
-    else                                    { return 45, $false }
+    # Redondeo simetrico al cuarto de hora mas cercano:
+    #   0-7   -> 0   (la hora apenas comenzo, redondea HACIA ABAJO)
+    #   8-22  -> 15
+    #   23-37 -> 30  (media hora exacta -> penalizacion)
+    #   38-52 -> 45
+    #   53-59 -> 60  (la hora ya casi termino, redondea HACIA ARRIBA)
+    if ($minutos -le 7)      { return 0,  $false }
+    elseif ($minutos -le 22) { return 15, $false }
+    elseif ($minutos -le 37) { return 30, $true  }
+    elseif ($minutos -le 52) { return 45, $false }
+    else                     { return 60, $false }
 }
 
 function Formato-12h($clave) {
@@ -314,7 +321,13 @@ function Generar-Reporte($log) {
     # Penalizacion MEDIA: sus bills se zerean, su tiempo (0.5hr) si cuenta
     $bills    = @{}
     $msjPenal = ""
-    foreach ($k in $log.Keys) { $bills[$k] = $log[$k].Bills }
+    foreach ($k in $log.Keys) {
+        # Excluir entradas sin minutos activos reales (lunch, o una hora que
+        # apenas comenzo cuando se genero el reporte) — no deben afectar
+        # AVG, TOTAL, TIME ni BUFFER. (MEDIA siempre tiene 30 min, no se filtra)
+        if ((Mins-DeClave $k $log) -eq 0) { continue }
+        $bills[$k] = $log[$k].Bills
+    }
     if ($bills.ContainsKey("MEDIA")) {
         $msjPenal       = "[!] PENALTY: -$($bills['MEDIA']) (Half hour)"
         $bills["MEDIA"] = 0
