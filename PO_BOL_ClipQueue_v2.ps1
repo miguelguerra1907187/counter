@@ -3,9 +3,7 @@
 #
 #  Ctrl + Shift derecho  -> abre ventana de input (nuevo lote)
 #  Ctrl+V            -> pega elemento actual, carga el siguiente
-#  Espacio + Tab     -> envia 7 tabuladores extra
-#                       (el Tab real ya avanza 1 campo solo;
-#                        7 + 1 = 8 campos saltados en total)
+#  ` (tecla arriba del Tab, teclado EUA)  -> envia 7 tabuladores
 #
 #  Al terminar la cola -> ventana se minimiza, cola se limpia
 #  Volver a llamar Ctrl+Shift derecho -> ventana fresca
@@ -16,12 +14,10 @@
 #  libras (redondeado hacia arriba). Se encoge sola a los 15s o con
 #  ESC. No usa hotkey de teclado global, solo clic con el mouse.
 #
-#  REGLAS DE LIMPIEZA:
-#    Elimina  ->  . # : _
-#    Elimina  ->  lineas separadoras OCR (-- --- .. 2+ repetidos)
-#    Conserva ->  guion simple (BOL-12345)
-#    Separa   ->  espacio , / salto de linea
-#    Formato  ->  MAYUSCULAS
+#  SIN PROCESAMIENTO DE TEXTO:
+#    El texto pegado se usa tal cual (sin mayusculas forzadas, sin
+#    quitar simbolos, sin unir lineas partidas).
+#    Separa   ->  espacio , / salto de linea (solo para armar la cola)
 #
 #  NOTA TECNICA:
 #  Este script usa GetAsyncKeyState (polling cada 40ms), el mismo
@@ -33,9 +29,8 @@
 #    - Es un patron mucho menos parecido a un keylogger real,
 #      por lo que es menos probable que un antivirus/EDR
 #      (ej. Cisco Secure/AMP) lo marque como sospechoso.
-#  Limitacion: a diferencia del hook, el polling NO puede
-#  bloquear la tecla Tab real. Por eso Espacio+Tab manda 7
-#  tabs en vez de 8 (el real ya cuenta como el primero).
+#  NOTA: la tecla ` manda 7 tabs via SendKeys (no depende del
+#  Tab real, a diferencia del diseño anterior con Espacio+Tab).
 # ============================================================
 
 # -- Una sola instancia a la vez --------------------------------
@@ -101,41 +96,14 @@ function Show-Toast($title, $msg) {
     $n.Dispose()
 }
 
-# -- Limpieza ----------------------------------------------------
+# -- Sin procesamiento -------------------------------------------
+# El texto se usa tal cual lo entrega el OCR/portapapeles. Lo unico
+# que se hace es separar los elementos (por coma, diagonal o salto de
+# linea) para armar la cola; no se toca mayusculas/minusculas, no se
+# quitan simbolos ni se unen lineas.
 function Get-Lista($rawText) {
-    $t = $rawText.ToUpper()
-    # Cero con raya (o-slash / signo de conjunto vacio) -> tratar como "0"
-    $t = $t -replace ('[' + [char]0x00D8 + [char]0x00F8 + [char]0x2205 + ']'), '0'
-    $t = $t -replace ('[-' + [char]0x2013 + [char]0x2014 + [char]0x2015 + [char]0x00B7 + ']{2,}'), ' '  # separadores OCR (construido con codepoints, sin bytes especiales en el archivo)
-    # Simbolos como . # : _ se ignoran y se pegan los dos lados (BOL.2145 -> BOL2145)
-    $t = $t -replace '\s*[\.#:_]\s*',  ''
-
-    # Si una linea son solo letras (ej. "PO", "BOL") y la linea siguiente
-    # empieza con numero o con guion (ej. "1235", "-2145"), es el mismo
-    # identificador partido en dos lineas por el documento de origen ->
-    # se pegan en un solo token (BOL + 1235 -> BOL1235).
-    $lineas = $t -split '\r?\n'
-    $unidas = New-Object System.Collections.Generic.List[string]
-    $i = 0
-    while ($i -lt $lineas.Count) {
-        $actual = $lineas[$i].Trim()
-        if ($actual -match '^[A-Z]+$' -and ($i + 1) -lt $lineas.Count) {
-            $siguiente = $lineas[$i + 1].Trim()
-            if ($siguiente -match '^[-0-9]') {
-                $unidas.Add($actual + $siguiente)
-                $i += 2
-                continue
-            }
-        }
-        $unidas.Add($actual)
-        $i++
-    }
-    $t = $unidas -join "`n"
-
-    # Coma, diagonal y salto de linea SI son separadores reales entre
-    # elementos distintos -> cada uno se toma como un numero mas de la cola.
-    $t = $t -replace '[,/\r\n]', ' '
-    $t = $t -replace '\s+',      ' '
+    $t = $rawText -replace '[,/\r\n]', ' '
+    $t = $t -replace '\s+', ' '
     $t = $t.Trim()
     return ($t -split ' ' | Where-Object { $_.Trim() -ne '' })
 }
@@ -418,8 +386,8 @@ function Procesar-CtrlV {
     }
 }
 
-# -- Accion Espacio+Tab -> 7 tabuladores extra ------------------
-function Procesar-SpaceTab {
+# -- Accion tecla ` (arriba del Tab) -> 7 tabuladores ------------
+function Procesar-TabExtra {
     Start-Sleep -Milliseconds 50
     for ($t = 0; $t -lt 7; $t++) {
         [System.Windows.Forms.SendKeys]::SendWait("{TAB}")
@@ -501,13 +469,12 @@ $timer.Add_Tick({
             $global:pressedCtrlV = $false
         }
 
-        # -- Espacio + Tab -> 7 tabs extra --
-        $space = [PoBolWin32]::GetAsyncKeyState(0x20)
-        $tab   = [PoBolWin32]::GetAsyncKeyState(0x09)
-        if (($space -ne 0) -and ($tab -ne 0)) {
+        # -- Tecla ` (VK_OEM_3, arriba del Tab en teclado EUA) -> 7 tabs extra --
+        $backtick = [PoBolWin32]::GetAsyncKeyState(0xC0)
+        if ($backtick -ne 0) {
             if (-not $global:pressedTab) {
                 $global:pressedTab = $true
-                Procesar-SpaceTab
+                Procesar-TabExtra
             }
         } else {
             $global:pressedTab = $false
