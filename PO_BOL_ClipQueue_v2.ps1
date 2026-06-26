@@ -387,11 +387,12 @@ function Procesar-CtrlV {
 }
 
 # -- Accion tecla ` (arriba del Tab) -> 7 tabuladores ------------
+# SendWait ya espera a que el tab se procese antes de regresar, asi que
+# sin pausa extra se manda lo mas rapido posible. Si el ERP es lento para
+# cambiar el foco entre campos y empieza a perder tabs, subir esto a 5-10ms.
 function Procesar-TabExtra {
-    Start-Sleep -Milliseconds 50
     for ($t = 0; $t -lt 7; $t++) {
         [System.Windows.Forms.SendKeys]::SendWait("{TAB}")
-        Start-Sleep -Milliseconds 30
     }
 }
 
@@ -439,8 +440,16 @@ $timer.Interval = 40
 $timer.Add_Tick({
     try {
         # -- Ctrl + Shift derecho -> abrir ventana de input --
-        $ctrl    = [PoBolWin32]::GetAsyncKeyState(0x11)
-        $rshift  = [PoBolWin32]::GetAsyncKeyState(0xA1)
+        # NOTA: GetAsyncKeyState devuelve un valor donde el bit alto (0x8000)
+        # indica si la tecla esta REALMENTE presionada en este instante, y el
+        # bit bajo indica si se presiono en algun momento desde la ultima
+        # llamada (aunque ya se haya soltado). Comparar con "-ne 0" detecta
+        # ambos casos y causaba que una tecla suelta hace rato se marcara
+        # como "presionada" en el primer poll despues de pausas largas
+        # (p.ej. justo despues de cerrar la ventana de input), saltandose
+        # el primer elemento de la cola. Por eso se filtra solo el bit alto.
+        $ctrl    = [PoBolWin32]::GetAsyncKeyState(0x11)  -band 0x8000
+        $rshift  = [PoBolWin32]::GetAsyncKeyState(0xA1)  -band 0x8000
         if (($ctrl -ne 0) -and ($rshift -ne 0)) {
             if (-not $global:pressedCtrlEnter) {
                 $global:pressedCtrlEnter = $true
@@ -453,8 +462,8 @@ $timer.Add_Tick({
         }
 
         # -- Ctrl + V -> avanzar cola (con debounce de tiempo) --
-        $ctrl = [PoBolWin32]::GetAsyncKeyState(0x11)
-        $vkey = [PoBolWin32]::GetAsyncKeyState(0x56)
+        $ctrl = [PoBolWin32]::GetAsyncKeyState(0x11) -band 0x8000
+        $vkey = [PoBolWin32]::GetAsyncKeyState(0x56) -band 0x8000
         if (($ctrl -ne 0) -and ($vkey -ne 0)) {
             if (-not $global:pressedCtrlV) {
                 $ahora  = Get-Date
@@ -470,7 +479,7 @@ $timer.Add_Tick({
         }
 
         # -- Tecla ` (VK_OEM_3, arriba del Tab en teclado EUA) -> 7 tabs extra --
-        $backtick = [PoBolWin32]::GetAsyncKeyState(0xC0)
+        $backtick = [PoBolWin32]::GetAsyncKeyState(0xC0) -band 0x8000
         if ($backtick -ne 0) {
             if (-not $global:pressedTab) {
                 $global:pressedTab = $true
