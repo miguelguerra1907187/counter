@@ -313,6 +313,52 @@ $formKG.Add_Paint({
 # bloquea nada porque NO se usa ShowDialog() aqui.
 $formKG.Show()
 
+# -- Panel de confirmacion de la cola (verificacion visual) ----------
+# Ningun script de polling puede garantizar 100% que nunca se le escape
+# un toque de tecla — es una limitacion fisica del metodo, no de este
+# codigo en particular. Lo que SI se puede garantizar es que, si algo
+# llega a fallar, no sea un fallo SILENCIOSO: este panel muestra, despues
+# de cada Ctrl+V real, exactamente que se acaba de pegar y que quedo
+# armado para el siguiente. Si lo que ves aqui no coincide con lo que
+# acabas de pegar en el ERP, sabes de inmediato que hay que corregir esa
+# linea a mano antes de seguir, en vez de descubrirlo hasta el final.
+$formQueue                 = New-Object System.Windows.Forms.Form
+$formQueue.TopMost         = $true
+$formQueue.FormBorderStyle = 'None'
+$formQueue.BackColor       = [System.Drawing.Color]::FromArgb(10, 10, 10)
+$formQueue.Opacity         = 0.92
+$formQueue.StartPosition   = 'Manual'
+$formQueue.ShowInTaskbar   = $false
+$formQueue.Size            = New-Object System.Drawing.Size(230, 54)
+$formQueue.Location        = New-Object System.Drawing.Point(($screenKG.Width - 230 - 20), 20)
+$formQueue.Visible         = $false
+
+$lblQueue              = New-Object System.Windows.Forms.Label
+$lblQueue.Dock         = 'Fill'
+$lblQueue.ForeColor    = [System.Drawing.Color]::Lime
+$lblQueue.BackColor    = [System.Drawing.Color]::Transparent
+$lblQueue.Font         = New-Object System.Drawing.Font('Consolas', 8, [System.Drawing.FontStyle]::Bold)
+$lblQueue.TextAlign    = 'MiddleLeft'
+$lblQueue.Padding      = New-Object System.Windows.Forms.Padding(6, 0, 4, 0)
+$formQueue.Controls.Add($lblQueue)
+
+$formQueue.Add_Paint({
+    param($sender, $e)
+    $pen = New-Object System.Drawing.Pen([System.Drawing.Color]::Lime, 1)
+    $e.Graphics.DrawRectangle($pen, 0, 0, ($formQueue.Width - 1), ($formQueue.Height - 1))
+    $pen.Dispose()
+})
+
+function Mostrar-PanelCola($texto) {
+    $lblQueue.Text = $texto
+    if (-not $formQueue.Visible) { $formQueue.Show() }
+    $formQueue.Refresh()
+}
+
+function Ocultar-PanelCola {
+    $formQueue.Hide()
+}
+
 # -- Estado -------------------------------------------------------
 $global:lista = @()
 $global:index = 0
@@ -347,6 +393,7 @@ function Cargar-Lista($lista) {
     Write-Host ""
 
     Show-Toast "Cola lista ($($lista.Count))" "Primero: $($lista[0])  - Ctrl+V para pegar"
+    Mostrar-PanelCola "ARMADO 1/$($lista.Count)`n$($lista[0])"
 
     # Minimizar para que el ERP quede al frente
     Start-Sleep -Milliseconds 500
@@ -364,12 +411,24 @@ function Procesar-CtrlV {
     $pegado       = $global:lista[$i]
     $global:index = $i + 1
 
+    # Esperar antes de cambiar el portapapeles: le da tiempo al ERP de
+    # terminar de leer/pegar el elemento ACTUAL antes de que lo cambiemos
+    # por el siguiente. Sin esto, en un ERP lento el portapapeles podia
+    # cambiar antes de que el ERP llegara a leerlo, y el campo terminaba
+    # mostrando el segundo elemento en vez del primero (parecia que se
+    # "saltaba" la primera linea, pero en realidad era una carrera contra
+    # el portapapeles). 300ms para dar margen de sobra: esto es trabajo
+    # de precision, importa mas que no se pierda ninguna linea que la
+    # velocidad.
+    Start-Sleep -Milliseconds 300
+
     if ($global:index -lt $total) {
         # Cargar siguiente
         [System.Windows.Forms.Clipboard]::SetText($global:lista[$global:index])
         $restantes = $total - $global:index
         Restore-Console
         Write-Host "  OK $pegado  ->  $($global:lista[$global:index])  ($restantes restantes)" -ForegroundColor Green
+        Mostrar-PanelCola "PEGASTE: $pegado`nARMADO $($global:index+1)/$total : $($global:lista[$global:index])"
         Minimize-Console
     } else {
         # Era la ultima -> limpiar y minimizar
@@ -377,6 +436,7 @@ function Procesar-CtrlV {
         $global:lista  = @()
         $global:index  = 0
         Show-Toast "OK Cola terminada" "Todos los $total elementos pegados. Ctrl+Shift derecho para nuevo lote."
+        Mostrar-PanelCola "PEGASTE: $pegado`nCOLA TERMINADA ($total/$total)"
         Restore-Console
         Write-Host "  OK $pegado  ->  ULTIMO" -ForegroundColor Green
         Write-Host ""
@@ -409,6 +469,7 @@ function Abrir-VentanaInput {
             Cargar-Lista $nuevaLista
         } else {
             Show-Toast "Sin elementos" "No se encontraron POs o BOLs en el texto."
+            Ocultar-PanelCola
             Minimize-Console
         }
     } else {
@@ -437,57 +498,91 @@ $cur = [PoBolWin32]::GetWindowLong($engine.Handle, $GWL_EXSTYLE)
 $timer          = New-Object System.Windows.Forms.Timer
 $timer.Interval = 40
 
+function Drenar-AcumuladorTeclas {
+    # GetAsyncKeyState acumula en su bit bajo "se presiono desde la ultima
+    # llamada" aunque ya se haya soltado. Si el timer estuvo detenido (p.ej.
+    # mientras la ventana de input estaba abierta) ese acumulador se queda
+    # con teclas viejas (el Ctrl+V que usaste para pegar el OCR adentro de
+    # la ventanita). Llamar la funcion una vez y tirar el resultado limpia
+    # ese acumulador antes de volver a confiar en el.
+    [void][PoBolWin32]::GetAsyncKeyState(0x11)
+    [void][PoBolWin32]::GetAsyncKeyState(0x56)
+    [void][PoBolWin32]::GetAsyncKeyState(0xA1)
+    [void][PoBolWin32]::GetAsyncKeyState(0xC0)
+}
+
 $timer.Add_Tick({
     try {
+        # NOTA SOBRE GetAsyncKeyState:
+        #  - bit alto (0x8000) = la tecla esta presionada AHORA MISMO.
+        #  - bit bajo (0x0001) = la tecla se presiono en algun momento desde
+        #    la ultima llamada a esta funcion, aunque ya se haya soltado.
+        #    Se "limpia" cada vez que se llama la funcion.
+        #
+        #  Usar solo el bit alto (como se hizo antes) es seguro contra
+        #  acumuladores viejos, pero con polling cada 40ms puede PERDER un
+        #  toque rapido de tecla si el usuario la suelta antes del siguiente
+        #  poll (toques de teclado rapidos suelen durar menos de 40ms) ->
+        #  eso causaba que a veces no se detectara un Ctrl+V real y la cola
+        #  se quedara "atrasada" un elemento (se repite uno y al final falta
+        #  el ultimo).
+        #
+        #  Usar solo el bit bajo (como se hacia originalmente) detecta
+        #  toques rapidos sin perder ninguno, pero si el timer estuvo
+        #  detenido y se reanuda, puede traer pegado un toque viejo.
+        #
+        #  Solucion: bit bajo para detectar el toque (no se pierde ningun
+        #  toque rapido) + bit alto de Ctrl para saber cuando "se acabo" el
+        #  combo y resetear el candado + Drenar-AcumuladorTeclas justo
+        #  despues de reanudar el timer para tirar cualquier acumulador
+        #  viejo de cuando estuvo pausado.
+        $ctrlRaw   = [PoBolWin32]::GetAsyncKeyState(0x11)
+        $rshiftRaw = [PoBolWin32]::GetAsyncKeyState(0xA1)
+        $vRaw      = [PoBolWin32]::GetAsyncKeyState(0x56)
+        $backtickRaw = [PoBolWin32]::GetAsyncKeyState(0xC0)
+
+        $ctrlDown     = ($ctrlRaw     -band 0x8000) -ne 0
+        $ctrlTapped   = ($ctrlRaw     -band 0x0001) -ne 0
+        # ctrlActive: igual de valido si Ctrl sigue presionado AHORA, o si se
+        # presiono y solto por completo entre el sondeo anterior y este. Sin
+        # el "or" del bit bajo, un combo Ctrl+V completo (presionar y soltar
+        # las dos teclas) que termina justo antes del siguiente sondeo de
+        # 40ms se perdia por completo: Ctrl ya no estaba "presionado ahora"
+        # cuando por fin se pregunto.
+        $ctrlActive   = $ctrlDown -or $ctrlTapped
+        $rshiftTapped = ($rshiftRaw   -band 0x0001) -ne 0
+        $vTapped      = ($vRaw        -band 0x0001) -ne 0
+        $backtickDown   = ($backtickRaw -band 0x8000) -ne 0
+        $backtickTapped = ($backtickRaw -band 0x0001) -ne 0
+
         # -- Ctrl + Shift derecho -> abrir ventana de input --
-        # NOTA: GetAsyncKeyState devuelve un valor donde el bit alto (0x8000)
-        # indica si la tecla esta REALMENTE presionada en este instante, y el
-        # bit bajo indica si se presiono en algun momento desde la ultima
-        # llamada (aunque ya se haya soltado). Comparar con "-ne 0" detecta
-        # ambos casos y causaba que una tecla suelta hace rato se marcara
-        # como "presionada" en el primer poll despues de pausas largas
-        # (p.ej. justo despues de cerrar la ventana de input), saltandose
-        # el primer elemento de la cola. Por eso se filtra solo el bit alto.
-        $ctrl    = [PoBolWin32]::GetAsyncKeyState(0x11)  -band 0x8000
-        $rshift  = [PoBolWin32]::GetAsyncKeyState(0xA1)  -band 0x8000
-        if (($ctrl -ne 0) -and ($rshift -ne 0)) {
-            if (-not $global:pressedCtrlEnter) {
-                $global:pressedCtrlEnter = $true
-                $timer.Stop()
-                Abrir-VentanaInput
-                $timer.Start()
-            }
-        } else {
-            $global:pressedCtrlEnter = $false
+        if ($ctrlActive -and $rshiftTapped -and -not $global:pressedCtrlEnter) {
+            $global:pressedCtrlEnter = $true
+            $timer.Stop()
+            Abrir-VentanaInput
+            Drenar-AcumuladorTeclas
+            $timer.Start()
         }
+        if (-not $ctrlActive) { $global:pressedCtrlEnter = $false }
 
         # -- Ctrl + V -> avanzar cola (con debounce de tiempo) --
-        $ctrl = [PoBolWin32]::GetAsyncKeyState(0x11) -band 0x8000
-        $vkey = [PoBolWin32]::GetAsyncKeyState(0x56) -band 0x8000
-        if (($ctrl -ne 0) -and ($vkey -ne 0)) {
-            if (-not $global:pressedCtrlV) {
-                $ahora  = Get-Date
-                $transcurrido = ($ahora - $global:lastCtrlVTime).TotalMilliseconds
-                if ($transcurrido -ge $global:CTRLV_DEBOUNCE_MS) {
-                    $global:pressedCtrlV  = $true
-                    $global:lastCtrlVTime = $ahora
-                    Procesar-CtrlV
-                }
+        if ($ctrlActive -and $vTapped -and -not $global:pressedCtrlV) {
+            $ahora  = Get-Date
+            $transcurrido = ($ahora - $global:lastCtrlVTime).TotalMilliseconds
+            if ($transcurrido -ge $global:CTRLV_DEBOUNCE_MS) {
+                $global:pressedCtrlV  = $true
+                $global:lastCtrlVTime = $ahora
+                Procesar-CtrlV
             }
-        } else {
-            $global:pressedCtrlV = $false
         }
+        if (-not $ctrlActive) { $global:pressedCtrlV = $false }
 
         # -- Tecla ` (VK_OEM_3, arriba del Tab en teclado EUA) -> 7 tabs extra --
-        $backtick = [PoBolWin32]::GetAsyncKeyState(0xC0) -band 0x8000
-        if ($backtick -ne 0) {
-            if (-not $global:pressedTab) {
-                $global:pressedTab = $true
-                Procesar-TabExtra
-            }
-        } else {
-            $global:pressedTab = $false
+        if ($backtickTapped -and -not $global:pressedTab) {
+            $global:pressedTab = $true
+            Procesar-TabExtra
         }
+        if (-not $backtickDown) { $global:pressedTab = $false }
     } catch {
         # Cualquier error inesperado -> avisar con notificacion y cerrar
         # limpio en vez de quedar colgado en silencio (consola oculta).
@@ -524,6 +619,7 @@ Minimize-Console
     [System.Windows.Forms.Application]::Exit()
 })
 
+Drenar-AcumuladorTeclas
 $timer.Start()
 
 try {
@@ -533,4 +629,5 @@ try {
     Remove-Item $lockFile -ErrorAction SilentlyContinue
     if ($script:timerEsperaKG) { $script:timerEsperaKG.Dispose() }
     if ($formKG -and -not $formKG.IsDisposed) { $formKG.Close() }
+    if ($formQueue -and -not $formQueue.IsDisposed) { $formQueue.Close() }
 }
