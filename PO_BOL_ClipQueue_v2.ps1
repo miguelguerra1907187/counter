@@ -268,7 +268,7 @@ $txtKG.Add_KeyDown({
         }
         try {
             $kg  = [int]$inputKG
-            $lbs = [Math]::Ceiling($kg * 2.20462)
+            $lbs = [Math]::Ceiling($kg * 2.205)
             $lblResultKG.Text      = "$lbs lbs"
             $lblResultKG.ForeColor = [System.Drawing.Color]::Lime
 
@@ -363,11 +363,12 @@ function Ocultar-PanelCola {
 $global:lista = @()
 $global:index = 0
 
-$global:pressedCtrlEnter = $false
-$global:pressedTab       = $false
-$global:pressedCtrlV     = $false
-$global:lastCtrlVTime    = [DateTime]::MinValue
-$global:CTRLV_DEBOUNCE_MS = 200   # tiempo minimo entre pegados aceptados
+$global:pressedCtrlEnter    = $false
+$global:pressedTab          = $false
+$global:pressedCtrlV        = $false
+$global:pressedLCtrlSpace   = $false
+$global:lastCtrlVTime       = [DateTime]::MinValue
+$global:CTRLV_DEBOUNCE_MS   = 200   # tiempo minimo entre pegados aceptados
 
 # -- Cargar lista y preparar primera PO -------------------------
 function Cargar-Lista($lista) {
@@ -437,6 +438,8 @@ function Procesar-CtrlV {
         $global:index  = 0
         Show-Toast "OK Cola terminada" "Todos los $total elementos pegados. Ctrl+Shift derecho para nuevo lote."
         Mostrar-PanelCola "PEGASTE: $pegado`nCOLA TERMINADA ($total/$total)"
+        Start-Sleep -Milliseconds 2000
+        Ocultar-PanelCola
         Restore-Console
         Write-Host "  OK $pegado  ->  ULTIMO" -ForegroundColor Green
         Write-Host ""
@@ -458,6 +461,15 @@ function Procesar-TabExtra {
 
 # -- Accion Ctrl+Shift derecho -> abrir ventana ----------------------
 function Abrir-VentanaInput {
+    # Vaciar la cola anterior antes de abrir la ventana: si quedaba algo
+    # pendiente del lote anterior, se descarta para que el nuevo pegado
+    # empiece siempre desde cero. OJO: NO se limpia el portapapeles aqui
+    # porque el usuario acaba de copiar texto del OCR y lo necesita para
+    # pegar dentro de este mismo dialog.
+    $global:lista  = @()
+    $global:index  = 0
+    Ocultar-PanelCola
+
     # No restauramos la consola aqui: el cuadro de input es TopMost y
     # se ve solo con eso. Restaurar la consola antes hacia que se viera
     # una pantalla grande de PowerShell tapando todo hasta hacerle click.
@@ -509,6 +521,17 @@ function Drenar-AcumuladorTeclas {
     [void][PoBolWin32]::GetAsyncKeyState(0x56)
     [void][PoBolWin32]::GetAsyncKeyState(0xA1)
     [void][PoBolWin32]::GetAsyncKeyState(0xC0)
+    [void][PoBolWin32]::GetAsyncKeyState(0xA2)
+    [void][PoBolWin32]::GetAsyncKeyState(0x20)
+}
+
+# -- Vaciar cola manualmente (Ctrl izq + Espacio) --------------------
+function Vaciar-Cola {
+    $global:lista  = @()
+    $global:index  = 0
+    [System.Windows.Forms.Clipboard]::Clear()
+    Ocultar-PanelCola
+    Show-Toast "Cola vaciada" "Lista limpia. Ctrl+Shift derecho para nuevo lote."
 }
 
 $timer.Add_Tick({
@@ -551,6 +574,7 @@ $timer.Add_Tick({
         # cuando por fin se pregunto.
         $ctrlActive   = $ctrlDown -or $ctrlTapped
         $rshiftTapped = ($rshiftRaw   -band 0x0001) -ne 0
+        $vDown        = ($vRaw        -band 0x8000) -ne 0   # V presionada AHORA MISMO
         $vTapped      = ($vRaw        -band 0x0001) -ne 0
         $backtickDown   = ($backtickRaw -band 0x8000) -ne 0
         $backtickTapped = ($backtickRaw -band 0x0001) -ne 0
@@ -575,7 +599,27 @@ $timer.Add_Tick({
                 Procesar-CtrlV
             }
         }
-        if (-not $ctrlActive) { $global:pressedCtrlV = $false }
+        # Resetear cuando V se suelta, NO cuando se suelta Ctrl.
+        # Patron real de uso: Ctrl sostenido + picar V varias veces.
+        # Si el reset dependia de Ctrl, el candado se quedaba cerrado
+        # todo el tiempo que Ctrl estuviera abajo y solo se pegaba el
+        # primer elemento aunque siguieras picando V.
+        if (-not $vDown) { $global:pressedCtrlV = $false }
+
+        # -- Ctrl izquierdo + Espacio -> vaciar cola ---------------------
+        # Mismo combo que abre el OCR: al presionarlo el script limpia la
+        # cola en paralelo, para que el nuevo escaneo empiece con lista
+        # fresca sin tener que entrar a la ventana de input primero.
+        $lctrlRaw   = [PoBolWin32]::GetAsyncKeyState(0xA2)
+        $spaceRaw   = [PoBolWin32]::GetAsyncKeyState(0x20)
+        $lctrlActive = (($lctrlRaw -band 0x8000) -ne 0) -or (($lctrlRaw -band 0x0001) -ne 0)
+        $spaceTapped = ($spaceRaw -band 0x0001) -ne 0
+        $spaceDown   = ($spaceRaw -band 0x8000) -ne 0
+        if ($lctrlActive -and $spaceTapped -and -not $global:pressedLCtrlSpace) {
+            $global:pressedLCtrlSpace = $true
+            Vaciar-Cola
+        }
+        if (-not $spaceDown) { $global:pressedLCtrlSpace = $false }
 
         # -- Tecla ` (VK_OEM_3, arriba del Tab en teclado EUA) -> 7 tabs extra --
         if ($backtickTapped -and -not $global:pressedTab) {
