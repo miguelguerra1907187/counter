@@ -5,11 +5,13 @@
   que el resto de tus scripts, para evitar falsos positivos de AV).
 
   Activacion:
-    - Hotkey: Supr (Delete)
+    - Hotkey: Supr (Delete) abre el menu | Insert repite el ultimo texto copiado
+      (sin abrir el menu, solo funciona cuando el menu esta cerrado)
     - Widget flotante clickeable (circulo pequeno, esquina inferior derecha)
 
   Uso:
-    - Nivel 1 (mouse o teclado): Izquierda = F1 | Derecha = F2 | Abajo = HOLD AT TERM
+    - Nivel 1 (mouse o teclado): Izquierda/Insert = F1 | Derecha/Inicio(Home) = F2 |
+      Abajo/RePag(Prior) = HOLD AT TERM
     - Nivel 2 y 3: solo teclado. Flechas Arriba/Abajo mueven el resaltado,
       numero (1-9) selecciona directo, Espacio marca/desmarca (listas multi),
       Enter confirma, Esc regresa un nivel / cancela.
@@ -32,29 +34,76 @@ using System.Runtime.InteropServices;
 public class LocalKeyState {
     [DllImport("user32.dll")]
     public static extern short GetAsyncKeyState(int vKey);
+
+    [DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+    [DllImport("user32.dll")]
+    private static extern uint GetCurrentThreadId();
+    [DllImport("user32.dll")]
+    private static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
+    [DllImport("user32.dll")]
+    private static extern bool BringWindowToTop(IntPtr hWnd);
+    [DllImport("user32.dll")]
+    private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+    [DllImport("user32.dll")]
+    private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
+
+    private const byte VK_MENU = 0x12;
+    private const uint KEYEVENTF_KEYUP = 0x2;
+
+    public static void ForceForeground(IntPtr hWnd) {
+        // Truco: Windows solo cede el foreground a un proceso que "acaba de
+        // recibir input" propio; simular un Alt fantasma satisface ese chequeo.
+        keybd_event(VK_MENU, 0, 0, UIntPtr.Zero);
+        keybd_event(VK_MENU, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+
+        IntPtr fg = GetForegroundWindow();
+        uint dummyProcId;
+        uint fgThread = GetWindowThreadProcessId(fg, out dummyProcId);
+        uint curThread = GetCurrentThreadId();
+        bool attached = false;
+        if (fgThread != curThread) {
+            attached = AttachThreadInput(curThread, fgThread, true);
+        }
+        ShowWindow(hWnd, 5); // SW_SHOW
+        BringWindowToTop(hWnd);
+        SetForegroundWindow(hWnd);
+        if (attached) {
+            AttachThreadInput(curThread, fgThread, false);
+        }
+    }
 }
 "@
 
 # ======================= CONFIGURACION DEL MENU =======================
 
 $ReasonesIlegibilidad = @('blurry','faded','too dark','obstructed')
+$BadBolFields         = @('shipper','cons','third party','bol','po','ref','quote','breakdown','weight')
+$BadBolReasons        = @('cutted','ilegible','faded')
 $Campos               = @('address','name','zip','city','state','pro#','weight','other')
+$ConsShprList         = @('city/zip dont route') + ($Campos | Where-Object { $_ -notin @('other','pro#','weight') }) + @('name,add,city,state,zip')
 
 $Force1Issues = @(
-    [PSCustomObject]@{ Label='bad bol';      Tag='bad bol';      Sub='reason-multi'; SubList=$ReasonesIlegibilidad }
-    [PSCustomObject]@{ Label='cons';         Tag='cons';         Sub='addr-issue' }
-    [PSCustomObject]@{ Label='shpr';         Tag='shpr';         Sub='addr-issue' }
+    [PSCustomObject]@{ Label='bad bol';      Tag='bad bol';      Sub='badbol-field'; SubList=$BadBolFields }
+    [PSCustomObject]@{ Label='cons';         Tag='cons';         Sub='reason-multi'; SubList=$ConsShprList }
+    [PSCustomObject]@{ Label='shpr';         Tag='shpr';         Sub='reason-multi'; SubList=$ConsShprList }
     [PSCustomObject]@{ Label='missing page'; Tag='missing page'; Sub='none' }
     [PSCustomObject]@{ Label='pro sticker';  Tag='pro sticker';  Sub='pro-sticker' }
 )
 
 $Force2Issues = @(
+    [PSCustomObject]@{ Label='bad bol / missing pages';   Tag='bad bol/missing pages';      Sub='badbol-field'; SubList=($BadBolFields + 'missing page') }
+    [PSCustomObject]@{ Label='cons';                      Tag='cons';                      Sub='reason-multi'; SubList=$ConsShprList }
+    [PSCustomObject]@{ Label='shpr';                      Tag='shpr';                      Sub='reason-multi'; SubList=$ConsShprList }
     [PSCustomObject]@{ Label='improper shipping name';   Tag='improper shipping name';   Sub='none' }
     [PSCustomObject]@{ Label='no hazmat info';            Tag='no hazmat info';            Sub='none' }
     [PSCustomObject]@{ Label='missing chemical const.';   Tag='missing chemical const.';   Sub='none' }
     [PSCustomObject]@{ Label='weight breakdown';          Tag='weight breakdown';          Sub='none' }
     [PSCustomObject]@{ Label='missing emergency contact'; Tag='missing emergency contact'; Sub='none' }
-    [PSCustomObject]@{ Label='bad bol / missing pages';   Tag='bad bol/missing pages';      Sub='reason-multi'; SubList=($ReasonesIlegibilidad + 'missing page') }
     [PSCustomObject]@{ Label='shipper cert not signed';   Tag='shipper cert not signed';   Sub='none' }
     [PSCustomObject]@{ Label='prohibited freight';        Tag='prohibited freight';        Sub='none' }
 )
@@ -68,7 +117,8 @@ $HoldText = 'Hold at term xxx DUE TO'
 $script:Basket       = New-Object System.Collections.Generic.List[string]
 $script:CurrentForce = $null
 $script:CurrentIssue = $null
-$script:State        = 'hidden'   # hidden | nivel1 | issue | reason-multi-pick | reason | fields | reason-pro | fields-pro | confirm
+$script:CurrentField = $null
+$script:State        = 'hidden'   # hidden | nivel1 | issue | reason-multi-pick | reason | fields | reason-pro | fields-pro | badbol-field | badbol-reason | confirm
 
 $script:LM_Title      = ''
 $script:LM_Options    = @()
@@ -76,6 +126,7 @@ $script:LM_Multi      = $false
 $script:LM_Highlight  = 0
 $script:LM_Selected   = New-Object System.Collections.Generic.HashSet[int]
 $script:LM_ItemBlocks = @()
+$script:LastCopied    = ''
 
 # ======================= VENTANA PRINCIPAL =======================
 
@@ -108,6 +159,7 @@ function Close-Menu {
 }
 
 function Copy-AndFlash([string]$text) {
+    $script:LastCopied = $text
     [System.Windows.Clipboard]::SetText($text)
     Clear-Root
     $panel = New-Object System.Windows.Controls.StackPanel
@@ -234,12 +286,16 @@ function Process-ListMenuKey($e) {
         }
         'Return' {
             if ($script:LM_Multi) {
+                if ($script:LM_Selected.Count -eq 0) {
+                    [void]$script:LM_Selected.Add($script:LM_Highlight)
+                }
                 return ,@($script:LM_Selected | Sort-Object | ForEach-Object { $script:LM_Options[$_] })
             } else {
                 return $script:LM_Options[$script:LM_Highlight]
             }
         }
         'Escape' { return 'BACK' }
+        'Home'   { return 'BACK' }
         default {
             $keyStr = $e.Key.ToString()
             if ($keyStr -match '^D([1-9])$') {
@@ -296,7 +352,7 @@ function Draw-Confirm {
     $stack.Children.Add($tb) | Out-Null
 
     $hint = New-Object System.Windows.Controls.TextBlock
-    $hint.Text = 'A: agregar otro issue   Enter: copiar y cerrar   Esc: cancelar'
+    $hint.Text = 'A/Insert: agregar otro   Enter: copiar y cerrar   Esc: deshacer ultimo   Inicio: cancelar todo'
     $hint.Foreground = $DimBrush
     $hint.FontSize = 11
     $stack.Children.Add($hint) | Out-Null
@@ -358,8 +414,29 @@ function Draw-Nivel1 {
 function Open-Menu {
     if ($Win.Visibility -eq 'Visible') { return }
     $Win.Visibility = 'Visible'
+    $hwnd = (New-Object System.Windows.Interop.WindowInteropHelper($Win)).Handle
+    [LocalKeyState]::ForceForeground($hwnd)
     $Win.Activate() | Out-Null
+    $Win.Focus() | Out-Null
+    [System.Windows.Input.Keyboard]::Focus($Win) | Out-Null
     Show-Nivel1
+
+    # Reintento por si el primer foco llego antes de que la ventana terminara
+    # de renderizarse (Windows a veces ignora el primer intento).
+    $retry = New-Object System.Windows.Threading.DispatcherTimer
+    $retry.Interval = [TimeSpan]::FromMilliseconds(120)
+    $retry.Add_Tick({
+        param($s, $e)
+        $s.Stop()
+        if ($Win.Visibility -eq 'Visible') {
+            $hwnd2 = (New-Object System.Windows.Interop.WindowInteropHelper($Win)).Handle
+            [LocalKeyState]::ForceForeground($hwnd2)
+            $Win.Activate() | Out-Null
+            $Win.Focus() | Out-Null
+            [System.Windows.Input.Keyboard]::Focus($Win) | Out-Null
+        }
+    })
+    $retry.Start()
 }
 
 # ---------- Dispatcher unico de teclado (registrado una sola vez) ----------
@@ -373,10 +450,14 @@ function Handle-KeyDown {
     if ($script:State -eq 'nivel1') {
         switch ($e.Key) {
             'Left'   { $script:CurrentForce = 'f1';  Enter-IssueMenu }
+            'Insert' { $script:CurrentForce = 'f1';  Enter-IssueMenu }
             'D1'     { $script:CurrentForce = 'f1';  Enter-IssueMenu }
             'Right'  { $script:CurrentForce = 'haz'; Enter-IssueMenu }
+            'Home'   { $script:CurrentForce = 'haz'; Enter-IssueMenu }
             'D3'     { $script:CurrentForce = 'haz'; Enter-IssueMenu }
             'Down'   { Copy-AndFlash $HoldText }
+            'Prior'  { Copy-AndFlash $HoldText }
+            'PageUp' { Copy-AndFlash $HoldText }
             'D2'     { Copy-AndFlash $HoldText }
             'Escape' { Close-Menu }
         }
@@ -386,11 +467,16 @@ function Handle-KeyDown {
     if ($script:State -eq 'confirm') {
         switch ($e.Key) {
             'A'      { Enter-IssueMenu }
+            'Insert' { Enter-IssueMenu }
             'Return' {
                 $prefix = if ($script:CurrentForce -eq 'f1') { 'f1' } else { 'haz' }
                 Copy-AndFlash ("$prefix-" + ($script:Basket -join ','))
             }
-            'Escape' { Close-Menu }
+            'Escape' {
+                if ($script:Basket.Count -gt 0) { $script:Basket.RemoveAt($script:Basket.Count - 1) }
+                Enter-IssueMenu
+            }
+            'Home'   { Close-Menu }
         }
         return
     }
@@ -413,11 +499,12 @@ function Handle-KeyDown {
                 'reason-multi' { Enter-ListMenu $script:CurrentIssue.Label $script:CurrentIssue.SubList $true 'reason-multi-pick' }
                 'addr-issue'   { Enter-ListMenu $script:CurrentIssue.Label $RazonesAddrIssue $false 'reason' }
                 'pro-sticker'  { Enter-ListMenu $script:CurrentIssue.Label $RazonesProSticker $false 'reason-pro' }
+                'badbol-field' { Enter-ListMenu $script:CurrentIssue.Label $script:CurrentIssue.SubList $false 'badbol-field' }
             }
         }
         'reason-multi-pick' {
             $picked = $result
-            $tag = if ($picked.Count -eq 0) { $script:CurrentIssue.Tag } else { $script:CurrentIssue.Tag + '-' + ($picked -join '+') }
+            $tag = if ($picked.Count -eq 0) { $script:CurrentIssue.Tag } else { $script:CurrentIssue.Tag + '-' + ($picked -join ',') }
             $script:Basket.Add($tag); Enter-Confirm
         }
         'reason' {
@@ -429,7 +516,7 @@ function Handle-KeyDown {
         }
         'fields' {
             $fields = $result
-            $suffix = if ($fields.Count -gt 0) { $fields -join '+' } else { 'address' }
+            $suffix = if ($fields.Count -gt 0) { $fields -join ',' } else { 'address' }
             $script:Basket.Add($script:CurrentIssue.Tag + '-' + $suffix); Enter-Confirm
         }
         'reason-pro' {
@@ -441,7 +528,20 @@ function Handle-KeyDown {
         }
         'fields-pro' {
             $fields = $result
-            $suffix = if ($fields.Count -gt 0) { $fields -join '+' } else { 'info' }
+            $suffix = if ($fields.Count -gt 0) { $fields -join ',' } else { 'info' }
+            $script:Basket.Add($script:CurrentIssue.Tag + '-' + $suffix); Enter-Confirm
+        }
+        'badbol-field' {
+            if ($result -eq 'missing page') {
+                $script:Basket.Add($script:CurrentIssue.Tag + '-missing page'); Enter-Confirm
+            } else {
+                $script:CurrentField = $result
+                Enter-ListMenu "$result - razon" $BadBolReasons $true 'badbol-reason'
+            }
+        }
+        'badbol-reason' {
+            $reasons = $result
+            $suffix = if ($reasons.Count -gt 0) { $script:CurrentField + '-' + ($reasons -join ',') } else { $script:CurrentField }
             $script:Basket.Add($script:CurrentIssue.Tag + '-' + $suffix); Enter-Confirm
         }
     }
@@ -480,8 +580,10 @@ $Widget.Show()
 # texto con Supr en otro lado, en vez de borrar te abrira este menu.
 
 $VK_DELETE = 0x2E
+$VK_INSERT = 0x2D
 
-$script:HotkeyArmed = $true
+$script:HotkeyArmed  = $true
+$script:InsertArmed  = $true
 $hotkeyTimer = New-Object System.Windows.Threading.DispatcherTimer
 $hotkeyTimer.Interval = [TimeSpan]::FromMilliseconds(60)
 $hotkeyTimer.Add_Tick({
@@ -490,6 +592,18 @@ $hotkeyTimer.Add_Tick({
         if ($script:HotkeyArmed) { $script:HotkeyArmed = $false; Open-Menu }
     } else {
         $script:HotkeyArmed = $true
+    }
+
+    $ins = ([LocalKeyState]::GetAsyncKeyState($VK_INSERT) -band 0x8000) -ne 0
+    if ($ins) {
+        if ($script:InsertArmed) {
+            $script:InsertArmed = $false
+            if ($script:State -eq 'hidden' -and $script:LastCopied) {
+                [System.Windows.Clipboard]::SetText($script:LastCopied)
+            }
+        }
+    } else {
+        $script:InsertArmed = $true
     }
 })
 $hotkeyTimer.Start()
